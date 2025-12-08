@@ -1,0 +1,47 @@
+spring:
+  application:
+    name=: SocialPlatform
+  # 数据库连接
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/social_platform?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: ${PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ${PASSWORD}
+      timeout: 3000 # 超时时间
+      lettuce:
+        pool:
+          max-active: 10 # 最大连接数
+          max-idle: 10 # 最大空闲连接数
+          min-idle: 1 # 最小空闲连接数
+          time-between-eviction-runs: 10s # 逐出连接的最小空闲时间
+# swagger
+springdoc:
+  # 分组文档
+  group-configs:
+    - group: system
+      paths-to-match:
+        - /system/**
+    - group: user
+      paths-to-match:
+        - /user/**
+server:
+#  servlet:
+#    context-path: /api
+  port: 8081
+
+logging:
+  level:
+    root: info
+  file:
+    path: logs
+
+
+social-platform:
+  system-constants:
+    user-nickname-prefix: "user_"
+    image-upload-dir: "D:\\Server\\nginx-1.28.0\\nginx-1.28.0\\html\\social_platform_dp\\imgs"
