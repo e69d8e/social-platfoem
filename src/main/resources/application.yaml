@@ -19,6 +19,7 @@ spring:
           max-idle: 10 # 最大空闲连接数
           min-idle: 1 # 最小空闲连接数
           time-between-eviction-runs: 10s # 逐出连接的最小空闲时间
+      database: 1
 # swagger
 springdoc:
   # 分组文档

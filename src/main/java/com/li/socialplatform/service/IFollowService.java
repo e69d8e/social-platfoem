@@ -6,4 +6,6 @@ import com.li.socialplatform.pojo.entity.Result;
 
 public interface IFollowService extends IService<Follow> {
     Result follow(Long id);
+
+    Result cancelFollow(Long id);
 }

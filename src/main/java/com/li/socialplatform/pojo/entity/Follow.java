@@ -18,10 +18,10 @@ public class Follow implements Serializable {
     private Long id;
 
     @TableField("follower_id")
-    private Long followerId;
+    private Long followerId; // 关注者id
 
     @TableField("followee_id")
-    private Long followeeId;
+    private Long followeeId; // 被关注的用户id
 
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;

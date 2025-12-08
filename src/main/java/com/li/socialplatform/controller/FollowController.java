@@ -3,10 +3,7 @@ package com.li.socialplatform.controller;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.service.IFollowService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @author e69d8e
@@ -22,5 +19,10 @@ public class FollowController {
     @PostMapping("/{id}")
     public Result follow(@PathVariable Long id) {
         return followService.follow(id);
+    }
+    // 取消关注
+    @DeleteMapping("/{id}")
+    public Result cancelFollow(@PathVariable Long id) {
+        return followService.cancelFollow(id);
     }
 }
