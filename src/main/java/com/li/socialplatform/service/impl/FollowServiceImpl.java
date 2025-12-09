@@ -57,8 +57,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         }
         // 粉丝数加一
         redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, 1);
-        // 缓存关注列表
-        redisTemplate.opsForSet().add(KeyConstant.FOLLOW_LIST_KEY + user.getId(), id);
+        // 缓存粉丝列表
+        redisTemplate.opsForSet().add(KeyConstant.FANS_LIST_KEY + id, user.getId());
         // 添加关注
         followMapper.insert(new Follow(null, user.getId(), id, null));
         return Result.ok();
@@ -76,6 +76,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (delete == 0) {
             return Result.error(MessageConstant.USER_NOT_FOLLOWED);
         }
+        // 粉丝数减一
+        redisTemplate.opsForSet().remove(KeyConstant.FANS_LIST_KEY + id, user.getId());
         redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
         return Result.ok();
     }
