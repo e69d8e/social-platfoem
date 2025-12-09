@@ -106,7 +106,8 @@ public class UserService extends ServiceImpl<UserMapper, User> implements IUserS
         user.setAvatar(userDTO.getAvatar() == null ? user.getAvatar() : userDTO.getAvatar());
         user.setBio(userDTO.getBio() == null ? user.getBio() : userDTO.getBio());
         user.setGender(userDTO.getGender() == null ? user.getGender() : userDTO.getGender());
-
+        user.setFansPrivate(userDTO.getFansPrivate() == null ? user.getFansPrivate() : userDTO.getFansPrivate());
+        user.setFollowPrivate(userDTO.getFollowPrivate() == null ? user.getFollowPrivate() : userDTO.getFollowPrivate());
         userMapper.updateById(user);
         return Result.ok();
     }

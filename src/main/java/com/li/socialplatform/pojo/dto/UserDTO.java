@@ -25,4 +25,6 @@ public class UserDTO implements Serializable {
     private String authority;
     private Boolean enabled;
 
+    private Boolean fansPrivate;
+    private Boolean followPrivate;
 }

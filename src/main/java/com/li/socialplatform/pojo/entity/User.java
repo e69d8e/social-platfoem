@@ -47,4 +47,10 @@ public class User implements Serializable {
 
     @TableField(value = "enabled")
     private Boolean enabled;
+
+    @TableField(value = "fans_private")
+    private Boolean fansPrivate; // 是否允许他人查看粉丝列表 (0: 允许, 1: 不允许)
+
+    @TableField(value = "follow_private")
+    private Boolean followPrivate; // 是否允许他人查看关注列表 (0: 允许, 1: 不允许)
 }

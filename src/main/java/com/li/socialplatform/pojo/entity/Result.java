@@ -30,6 +30,9 @@ public class Result {
     public static Result error() {
         return new Result("0", "error", "", 0L);
     }
+    public static Result error(String message, Object data) {
+        return new Result("0", message, data, 0L);
+    }
     public static Result error(String message, String code) {
         return new Result(code, message, "", 0L);
     }

@@ -19,4 +19,6 @@ public class MessageConstant {
     public static final String USER_NOT_EXIST = "用户不存在";
     public static final String USER_CANNOT_FOLLOW_SELF = "无法关注自己";
     public static final String USER_NOT_FOLLOWED = "用户未关注";
+    public static final String USER_FANS_PRIVATE = "该用户粉丝列表为私密状态";
+    public static final String USER_FOLLOW_PRIVATE = "该用户关注列表为私密状态";
 }
