@@ -9,4 +9,5 @@ public class KeyConstant {
     public static final String FOLLOW_LIST_KEY = "follow-list:";
     public static final String FANS_LIST_KEY = "fans-list:";
     public static final String POST_LIST_KEY = "post-list:";
+    public static final String COMMENT_KEY = "comment:";
 }
