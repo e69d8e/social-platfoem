@@ -96,15 +96,20 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         postVO.setPostImages(postImages);
         postVO.setUser(getUserVO(user));
         postVO.setCategoryName(categoryMapper.selectById(post.getCategoryId()).getName());
+        // 查询是否点过赞
+        Long userId = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername())).getId();
+        postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
         return Result.ok(postVO);
     }
 
     @Override
     public Result listPosts(Long lastId, Integer offset) {
+        // 获取当前用户
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
                 0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
-        return Result.ok(getScrollResult(typedTuples));
+        return Result.ok(getScrollResult(typedTuples, user.getId()));
     }
 
     @Override
@@ -115,10 +120,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY + user.getId(),
                         0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
-        return Result.ok(getScrollResult(typedTuples));
+        return Result.ok(getScrollResult(typedTuples, user.getId()));
     }
 
-    private ScrollResult<PostVO> getScrollResult(Set<ZSetOperations.TypedTuple<Object>> typedTuples) {
+    private ScrollResult<PostVO> getScrollResult(Set<ZSetOperations.TypedTuple<Object>> typedTuples, Long userId) {
         if (typedTuples == null || typedTuples.isEmpty()) {
             ScrollResult<PostVO> objectScrollResult = new ScrollResult<>();
             objectScrollResult.setList(new ArrayList<>());
@@ -142,6 +147,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             postVO.setUser(getUserVO(userMapper.selectById(postVO.getPost().getUserId())));
             postVO.setPostImages(postImageMapper.selectList(
                     new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id)));
+            postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
             postVOS.add(postVO);
         }
         int nweOffset = 1;

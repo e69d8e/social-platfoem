@@ -24,4 +24,6 @@ public class PostVO implements Serializable {
     private UserVO user;
 
     private List<PostImage> postImages;
+
+    private Boolean liked; // 是否点赞
 }

@@ -1,7 +1,6 @@
 package com.li.socialplatform.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,6 +8,10 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
+/**
+ * @author e69d8e
+ * @since 2025/12/9 19:22
+ */
 @TableName("follow")
 @Data
 @NoArgsConstructor

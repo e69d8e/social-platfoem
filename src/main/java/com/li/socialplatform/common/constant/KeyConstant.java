@@ -6,8 +6,8 @@ package com.li.socialplatform.common.constant;
  */
 public class KeyConstant {
     public static final String FOLLOW_COUNT_KEY = "follow-count:";
-    public static final String FOLLOW_LIST_KEY = "follow-list:";
     public static final String FANS_LIST_KEY = "fans-list:";
     public static final String POST_LIST_KEY = "post-list:";
     public static final String COMMENT_KEY = "comment:";
+    public static final String LIKE_KEY = "like:";
 }
