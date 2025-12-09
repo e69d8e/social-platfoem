@@ -27,7 +27,8 @@ public class SecurityConfig {
                                         "/swagger-ui.html",
                                         "/doc.html",
                                         "/webjars/**",
-                                        "/user/register"
+                                        "/user/register",
+                                        "/upload/**"
                                 ).permitAll() // 放行swagger
                                 .anyRequest() // 所有请求
                                 .authenticated()) // 已认证请求会自动被授权

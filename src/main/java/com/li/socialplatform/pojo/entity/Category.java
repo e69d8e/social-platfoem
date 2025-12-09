@@ -12,16 +12,15 @@ import java.io.Serializable;
 
 /**
  * @author e69d8e
- * @since 2025/12/8 15:31
+ * @since 2025/12/9 14:16
  */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@TableName("authority")
-public class Authority implements Serializable {
+@TableName("category")
+public class Category implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
-
-    @TableField(value = "authority")
-    private String authority;
+    @TableField(value = "name")
+    private String name;
 }

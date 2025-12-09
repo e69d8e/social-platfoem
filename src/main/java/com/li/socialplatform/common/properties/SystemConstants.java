@@ -14,4 +14,5 @@ import org.springframework.stereotype.Component;
 public class SystemConstants {
     public String userNicknamePrefix;
     public String imageUploadDir;
+    public String baseUrl;
 }

@@ -46,3 +46,4 @@ social-platform:
   system-constants:
     user-nickname-prefix: "user_"
     image-upload-dir: "D:\\Server\\nginx-1.28.0\\nginx-1.28.0\\html\\social_platform_dp\\imgs"
+    base-url: "http://localhost:8080/imgs"
