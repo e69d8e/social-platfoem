@@ -16,11 +16,9 @@ import java.time.LocalDateTime;
 public class Post implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO) // 帖子ID通常使用数据库自增
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long id;
 
     @TableField("user_id")
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long userId;
 
     @TableField("content")
@@ -32,6 +30,6 @@ public class Post implements Serializable {
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
-    @TableField(value = "enable")
-    private Boolean enable;
+    @TableField(value = "enabled")
+    private Boolean enabled;
 }

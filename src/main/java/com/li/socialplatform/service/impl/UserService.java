@@ -82,16 +82,16 @@ public class UserService extends ServiceImpl<UserMapper, User> implements IUserS
         } else {
             user = userMapper.selectById(id);
         }
+        // 获取角色
         UserVO userVO = new UserVO();
-        userVO.setId(user.getId());
-        userVO.setUsername(user.getUsername());
+        userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
+        userVO.setCreateTime(user.getCreateTime());
         userVO.setNickname(user.getNickname());
         userVO.setAvatar(user.getAvatar());
         userVO.setBio(user.getBio());
         userVO.setGender(user.getGender());
-        // 获取角色
-        userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-        userVO.setCreateTime(user.getCreateTime());
+        userVO.setId(user.getId());
+        userVO.setUsername(user.getUsername());
         return Result.ok(userVO);
     }
 
