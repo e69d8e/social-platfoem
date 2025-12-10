@@ -27,11 +27,18 @@ public class SecurityConfig {
                                         "/swagger-ui.html",
                                         "/doc.html",
                                         "/webjars/**",
-                                        "/user/register",
-                                        "/upload/**"
-                                ).permitAll() // 放行swagger
+                                        "/user/register", // 注册接口
+                                        "/test2", // 测试接口
+                                        "/user/profile/*", // 查询其他用户信息接口
+                                        "/post/*", // 帖子接口
+                                        "/follow/list/followee/{id}", // 其他用户关注列表接口
+                                        "/follow/list/{id}", // 其他用户粉丝列表接口
+                                        "/comment/post/{id}", // 获取一级评论
+                                        "/comment/post/{id}/{commentId}" // 获取二级评论
+                                ).permitAll() // 放行
                                 .anyRequest() // 所有请求
-                                .authenticated()) // 已认证请求会自动被授权
+                                .authenticated() // 需要认证
+                )
                 .formLogin(
                         login -> login
                                         .loginProcessingUrl("/user/login").permitAll() // 前端登录接口

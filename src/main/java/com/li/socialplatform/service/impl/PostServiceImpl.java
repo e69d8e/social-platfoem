@@ -90,6 +90,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             return Result.error(MessageConstant.POST_NOT_EXIST);
         }
         User user = userMapper.selectById(post.getUserId());
+        if (user == null) {
+            return Result.error(MessageConstant.USER_NOT_FOUND);
+        }
         List<PostImage> postImages = postImageMapper.selectList(new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
         PostVO postVO = new PostVO();
         postVO.setPost(post);
@@ -97,18 +100,27 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         postVO.setUser(getUserVO(user));
         postVO.setCategoryName(categoryMapper.selectById(post.getCategoryId()).getName());
         // 查询是否点过赞
-        Long userId = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername())).getId();
-        postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
+        String username = getCurrentUsername();
+        User u = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        // 如果当前用户未登录默认没有点赞
+        if (u == null) {
+            postVO.setLiked(false);
+            return Result.ok(postVO);
+        }
+        postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, u.getId()));
         return Result.ok(postVO);
     }
 
     @Override
     public Result listPosts(Long lastId, Integer offset) {
-        // 获取当前用户
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
                 0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
+        // 获取当前用户
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+        if (user == null) {
+            return Result.ok(getScrollResult(typedTuples, null));
+        }
         return Result.ok(getScrollResult(typedTuples, user.getId()));
     }
 
@@ -116,7 +128,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     public Result listFollowPosts(Long lastId, Integer offset) {
         // 获取当前用户
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
-        //
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY + user.getId(),
                         0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
@@ -147,6 +158,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             postVO.setUser(getUserVO(userMapper.selectById(postVO.getPost().getUserId())));
             postVO.setPostImages(postImageMapper.selectList(
                     new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id)));
+            if (id == null) {
+                postVO.setLiked(false);
+            }
             postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
             postVOS.add(postVO);
         }

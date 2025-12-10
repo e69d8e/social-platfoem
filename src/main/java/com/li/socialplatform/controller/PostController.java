@@ -31,9 +31,8 @@ public class PostController {
     public Result listPosts(@RequestParam Long lastId, @RequestParam(defaultValue = "0") Integer offset) {
         return postService.listPosts(lastId,  offset);
     }
-
     // 关注帖子列表
-    @GetMapping("/follow")
+    @GetMapping("/follow/list")
     public Result listFollowPosts(@RequestParam Long lastId, @RequestParam(defaultValue = "0") Integer offset) {
         return postService.listFollowPosts(lastId, offset);
     }

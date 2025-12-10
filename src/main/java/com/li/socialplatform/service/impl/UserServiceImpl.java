@@ -90,6 +90,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         } else {
             user = userMapper.selectById(id);
+            if (user == null) {
+                return Result.error(MessageConstant.USER_NOT_FOUND);
+            }
         }
         // 获取角色
         UserVO userVO = new UserVO();

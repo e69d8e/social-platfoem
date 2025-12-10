@@ -35,7 +35,7 @@ public class FollowController {
         return followService.getFollowerList(id, pageNum, pageSize);
     }
     // 获取某个用户关注列表
-    @GetMapping("/followee/{id}")
+    @GetMapping("/list/followee/{id}")
     public Result getFolloweeList(@PathVariable Long id,
                                   @RequestParam(defaultValue = "1") Integer pageNum,
                                   @RequestParam(defaultValue = "10") Integer pageSize) {
