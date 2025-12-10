@@ -13,4 +13,6 @@ public interface IUserService extends IService<User> {
     Result updateUserProfile(UserDTO userDTO);
 
     Result updatePassword(UserDTO userDTO);
+
+    Result signIn();
 }

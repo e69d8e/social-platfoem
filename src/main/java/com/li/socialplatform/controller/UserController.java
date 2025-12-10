@@ -41,4 +41,10 @@ public class UserController {
     public Result updatePassword(@RequestBody UserDTO userDTO) {
         return userService.updatePassword(userDTO);
     }
+
+    // 签到 返回当月累计签到次数
+    @PostMapping("/sign")
+    public Result signIn() {
+        return userService.signIn();
+    }
 }

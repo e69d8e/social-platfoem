@@ -10,4 +10,5 @@ public class KeyConstant {
     public static final String POST_LIST_KEY = "post-list:";
     public static final String COMMENT_KEY = "comment:";
     public static final String LIKE_KEY = "like:";
+    public static final String SIGN_IN_KEY = "sing-in:";
 }

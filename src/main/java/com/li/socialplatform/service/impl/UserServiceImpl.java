@@ -2,6 +2,7 @@ package com.li.socialplatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.mapper.AuthorityMapper;
@@ -12,12 +13,18 @@ import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IUserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,11 +33,13 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-public class UserService extends ServiceImpl<UserMapper, User> implements IUserService {
+@Slf4j
+public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
 
     private final UserMapper userMapper;
     private final SystemConstants systemConstants;
     private final AuthorityMapper authorityMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     // 密码加密
     private String encodePassword(String password) {
@@ -76,7 +85,7 @@ public class UserService extends ServiceImpl<UserMapper, User> implements IUserS
 
     @Override
     public Result getUserProfile(Long id) {
-        User user = null;
+        User user;
         if (id == null) {
             user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         } else {
@@ -120,5 +129,37 @@ public class UserService extends ServiceImpl<UserMapper, User> implements IUserS
         user.setPassword(encodePassword(userDTO.getPassword()));
         userMapper.updateById(user);
         return Result.ok();
+    }
+
+    @Override
+    public Result signIn() {
+        LocalDateTime now = LocalDateTime.now();
+        String key = KeyConstant.SIGN_IN_KEY + getCurrentUsername() + now.format(DateTimeFormatter.ofPattern("yyyyMM"));
+        // 获取今天是当月的第几天
+        int day = now.getDayOfMonth();
+        // 设置签到
+        redisTemplate.opsForValue()
+                .setBit(key, day - 1, true);
+        // 计算当月截至今天连续签到次数
+        List<Long> longs = redisTemplate.opsForValue().bitField(key,
+                BitFieldSubCommands.create()
+                        .get(BitFieldSubCommands.BitFieldType.unsigned(day))
+                        .valueAt(0) // 从第0位开始读取
+        );
+        // 0000000011
+        Long tmp = null;
+        if (longs != null) {
+            tmp = longs.getFirst();
+        }
+        int count = 0;
+        while (tmp != null && tmp != 0) {
+            if ((tmp & 1) == 1) {
+                count++;
+            } else {
+                break;
+            }
+            tmp = tmp >> 1;
+        }
+        return Result.ok(count);
     }
 }
