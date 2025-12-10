@@ -1,7 +1,6 @@
 package com.li.socialplatform.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,6 +19,9 @@ public class Post implements Serializable {
 
     @TableField("user_id")
     private Long userId;
+
+    @TableField("title")
+    private String title;
 
     @TableField("content")
     private String content;

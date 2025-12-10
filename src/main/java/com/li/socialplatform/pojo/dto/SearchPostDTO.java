@@ -5,18 +5,18 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.List;
 
 /**
  * @author e69d8e
- * @since 2025/12/9 15:15
+ * @since 2025/12/10 15:58
  */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class PostDTO implements Serializable {
-    private String content;
-    private String title;
+public class SearchPostDTO implements Serializable {
+    private String search;
     private Integer categoryId;
-    private List<String> images;
+    private Boolean enabled;
+    private Integer pageNum;
+    private Integer pageSize;
 }

@@ -24,7 +24,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * @author e69d8e
@@ -55,7 +54,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         // 保存到缓存
         // 如果是回复其他人的不缓存
         if (comment.getReplyTo() == null) {
-            redisTemplate.opsForZSet().add(KeyConstant.COMMENT_KEY + commentDTO.getPostId(), comment, System.currentTimeMillis());
+            redisTemplate.opsForZSet().add(KeyConstant.COMMENT_KEY + commentDTO.getPostId() + comment.getId(), comment, System.currentTimeMillis());
         }
         return Result.ok();
     }
@@ -86,8 +85,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             objectScrollResult.setOffset(0);
             return objectScrollResult;
         }
-        Set<Object> collect = typedTuples.stream()
-                .map(ZSetOperations.TypedTuple::getValue).collect(Collectors.toSet());
+        List<Object> collect = typedTuples.stream()
+                .map(ZSetOperations.TypedTuple::getValue).toList();
         // 解析id
         List<Comment> comments = collect.stream()
                 .map(comment -> BeanUtil.copyProperties(comment, Comment.class)).toList();

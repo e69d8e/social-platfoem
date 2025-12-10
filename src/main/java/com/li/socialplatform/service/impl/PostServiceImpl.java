@@ -9,7 +9,6 @@ import com.li.socialplatform.mapper.*;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
 import com.li.socialplatform.pojo.vo.PostVO;
-import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +19,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * @author e69d8e
@@ -36,7 +34,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final CategoryMapper categoryMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final SystemConstants systemConstants;
-    private final AuthorityMapper authorityMapper;
+//    private final AuthorityMapper authorityMapper;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -58,7 +56,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         }
         Post post = new Post();
         post.setUserId(id);
-        post.setContent(postDTO.getContent());
+        String title = postDTO.getTitle();
+        if (title == null || title.isEmpty()) {
+            return Result.error(MessageConstant.TITLE_IS_NULL);
+        }
+        post.setTitle(title);
+        String content = postDTO.getContent();
+        if (content == null || content.isEmpty()) {
+            return Result.error(MessageConstant.CONTENT_IS_NULL);
+        }
+        post.setContent(content);
         post.setCategoryId(postDTO.getCategoryId() == null ? 1 : postDTO.getCategoryId());
         postMapper.insert(post);
         log.info("用户 {} 发表了帖子 {}", id, post.getId());
@@ -97,7 +104,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         PostVO postVO = new PostVO();
         postVO.setPost(post);
         postVO.setPostImages(postImages);
-        postVO.setUser(getUserVO(user));
+//        postVO.setUser(getUserVO(user));
         postVO.setCategoryName(categoryMapper.selectById(post.getCategoryId()).getName());
         // 查询是否点过赞
         String username = getCurrentUsername();
@@ -143,25 +150,34 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             return objectScrollResult;
         }
         // 获取 id
-        Set<Object> collect = typedTuples.stream()
-                .map(ZSetOperations.TypedTuple::getValue).collect(Collectors.toSet());
+        List<Object> collect = typedTuples.stream()
+                .map(ZSetOperations.TypedTuple::getValue).toList();
         // 解析id
         List<Long> ids = collect.stream().map(id -> Long.parseLong(id.toString())).toList();
+        log.info("获取帖子 {}", ids);
         // 获取 score
         List<Double> scores = typedTuples.stream()
                 .map(ZSetOperations.TypedTuple::getScore).toList();
         List<PostVO> postVOS = new ArrayList<>();
         for (Long id : ids) {
             PostVO postVO = new PostVO();
-            postVO.setPost(postMapper.selectById(id));
+            Post post = postMapper.selectById(id);
+            if (post == null) {
+                continue;
+            }
+            if (!post.getEnabled()) {
+                continue;
+            }
+            postVO.setPost(post);
             postVO.setCategoryName(categoryMapper.selectById(postVO.getPost().getCategoryId()).getName());
-            postVO.setUser(getUserVO(userMapper.selectById(postVO.getPost().getUserId())));
+//            postVO.setUser(getUserVO(userMapper.selectById(post.getUserId())));
             postVO.setPostImages(postImageMapper.selectList(
                     new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id)));
-            if (id == null) {
+            if (userId == null) {
                 postVO.setLiked(false);
+            } else {
+                postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
             }
-            postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
             postVOS.add(postVO);
         }
         int nweOffset = 1;
@@ -180,16 +196,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         postVOScrollResult.setMinTime(scores.getLast().longValue());
         return postVOScrollResult;
     }
-    private UserVO getUserVO(User user) {
-        UserVO userVO = new UserVO();
-        userVO.setId(user.getId());
-        userVO.setUsername(user.getUsername());
-        userVO.setNickname(user.getNickname());
-        userVO.setAvatar(user.getAvatar());
-        userVO.setBio(user.getBio());
-        userVO.setGender(user.getGender());
-        userVO.setCreateTime(user.getCreateTime());
-        userVO.setAuthority(authorityMapper.selectById(user.getId()).getAuthority());
-        return userVO;
-    }
+//    private UserVO getUserVO(User user) {
+//        UserVO userVO = new UserVO();
+//        userVO.setId(user.getId());
+//        userVO.setUsername(user.getUsername());
+//        userVO.setNickname(user.getNickname());
+//        userVO.setAvatar(user.getAvatar());
+//        userVO.setBio(user.getBio());
+//        userVO.setGender(user.getGender());
+//        userVO.setCreateTime(user.getCreateTime());
+//        userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
+//        return userVO;
+//    }
 }

@@ -21,7 +21,7 @@ public class PostVO implements Serializable {
 
     private String categoryName;
 
-    private UserVO user;
+//    private UserVO user;
 
     private List<PostImage> postImages;
 

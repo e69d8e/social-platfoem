@@ -36,6 +36,12 @@ public class SecurityConfig {
                                         "/comment/post/{id}", // 获取一级评论
                                         "/comment/post/{id}/{commentId}" // 获取二级评论
                                 ).permitAll() // 放行
+                                .requestMatchers(
+                                        "/admin/**"
+                                ).hasRole("ADMIN")
+                                .requestMatchers(
+                                        "/reviewer/**"
+                                ).hasRole("REVIEWER")
                                 .anyRequest() // 所有请求
                                 .authenticated() // 需要认证
                 )
