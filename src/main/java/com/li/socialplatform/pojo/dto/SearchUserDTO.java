@@ -17,6 +17,7 @@ public class SearchUserDTO implements Serializable {
     private String username;
     private String nickname;
     private Integer authorityId;
+    private Boolean enabled;
     private String gender;
     private Integer pageNum;
     private Integer pageSize;

@@ -1,15 +1,22 @@
 package com.li.socialplatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.mapper.AuthorityMapper;
+import com.li.socialplatform.mapper.PostMapper;
 import com.li.socialplatform.mapper.UserMapper;
+import com.li.socialplatform.pojo.dto.SearchPostDTO;
+import com.li.socialplatform.pojo.dto.SearchUserDTO;
 import com.li.socialplatform.pojo.dto.UserDTO;
+import com.li.socialplatform.pojo.entity.Post;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.pojo.entity.User;
+import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IUserService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +31,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +48,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final SystemConstants systemConstants;
     private final AuthorityMapper authorityMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final PostMapper postMapper;
 
     // 密码加密
     private String encodePassword(String password) {
@@ -74,7 +83,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         user.setUsername(userDTO.getUsername());
 
         userMapper.insert(user);
-        return Result.ok();
+        return Result.ok("注册成功", "");
     }
 
     // 获取当前登录用户的用户名
@@ -121,7 +130,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         user.setFansPrivate(userDTO.getFansPrivate() == null ? user.getFansPrivate() : userDTO.getFansPrivate());
         user.setFollowPrivate(userDTO.getFollowPrivate() == null ? user.getFollowPrivate() : userDTO.getFollowPrivate());
         userMapper.updateById(user);
-        return Result.ok();
+        return Result.ok("更新成功", "");
     }
 
     @Override
@@ -131,7 +140,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         );
         user.setPassword(encodePassword(userDTO.getPassword()));
         userMapper.updateById(user);
-        return Result.ok();
+        return Result.ok("修改成功", "");
     }
 
     @Override
@@ -164,5 +173,72 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             tmp = tmp >> 1;
         }
         return Result.ok(count);
+    }
+
+    @Override
+    public Result listPost(SearchPostDTO searchPostDTO) {
+        if (searchPostDTO.getPageNum() == null) {
+            searchPostDTO.setPageNum(1);
+        }
+        if (searchPostDTO.getPageSize() == null) {
+            searchPostDTO.setPageSize(10);
+        }
+        if (searchPostDTO.getSearch() == null) {
+            searchPostDTO.setSearch("");
+        }
+        IPage<Post> page = new Page<>(searchPostDTO.getPageNum(), searchPostDTO.getPageSize());
+        LambdaQueryWrapper<Post> search = new LambdaQueryWrapper<Post>()
+                .like(Post::getContent, searchPostDTO.getSearch())
+                .eq(Post::getEnabled, true);
+        if (searchPostDTO.getCategoryId() != null) {
+            search.eq(Post::getCategoryId, searchPostDTO.getCategoryId());
+        }
+        IPage<Post> postIPage = postMapper.selectPage(page, search);
+        List<Post> records = postIPage.getRecords();
+        if (records.isEmpty()) {
+            return Result.ok(List.of(), postIPage.getTotal());
+        }
+        List<PostVO> postVOS = new ArrayList<>();
+        for (Post record : records) {
+            PostVO postVO = new PostVO();
+            postVO.setPost(record);
+            postVOS.add(postVO);
+        }
+        return Result.ok(postVOS, postIPage.getTotal());
+    }
+
+    @Override
+    public Result listUser(SearchUserDTO searchUserDTO) {
+        if (searchUserDTO.getPageNum() == null) {
+            searchUserDTO.setPageNum(1);
+        }
+        if (searchUserDTO.getPageSize() == null) {
+            searchUserDTO.setPageSize(10);
+        }
+        if (searchUserDTO.getNickname() == null) {
+            searchUserDTO.setNickname("");
+        }
+        IPage<User> page = new Page<>(searchUserDTO.getPageNum(), searchUserDTO.getPageSize());
+        LambdaQueryWrapper<User> search = new LambdaQueryWrapper<User>()
+                .like(User::getNickname, searchUserDTO.getNickname());
+        if (searchUserDTO.getGender() != null) {
+            search.eq(User::getGender, searchUserDTO.getGender());
+        }
+        IPage<User> userIPage = userMapper.selectPage(page, search);
+        List<User> records = userIPage.getRecords();
+        List<UserVO> users = new ArrayList<>();
+        for (User record : records) {
+            UserVO userVO = new UserVO();
+            userVO.setId(record.getId());
+            userVO.setGender(record.getGender());
+            userVO.setBio(record.getBio());
+            userVO.setAvatar(record.getAvatar());
+            userVO.setUsername(record.getUsername());
+            userVO.setNickname(record.getNickname());
+            userVO.setCreateTime(record.getCreateTime());
+            userVO.setAuthority(authorityMapper.selectById(record.getAuthorityId()).getAuthority());
+            users.add(userVO);
+        }
+        return Result.ok(users, userIPage.getTotal());
     }
 }

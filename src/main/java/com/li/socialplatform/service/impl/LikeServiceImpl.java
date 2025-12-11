@@ -43,6 +43,6 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
             likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, postId).eq(LikeRecord::getUserId, userId));
             redisTemplate.opsForSet().add(key, userId);
         }
-        return Result.ok();
+        return Result.ok("点赞/取消成功", "");
     }
 }

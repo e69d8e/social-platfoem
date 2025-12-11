@@ -44,7 +44,7 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         user.setEnabled(!user.getEnabled());
-        return userMapper.updateById(user) > 0 ? Result.ok() : Result.error();
+        return userMapper.updateById(user) > 0 ? Result.ok("封禁/解封成功", "") : Result.error("封禁/解封失败");
     }
 
     @Override
@@ -54,7 +54,7 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         user.setAuthorityId(AuthorityConstant.REVIEWER);
-        return userMapper.updateById(user) > 0 ? Result.ok() : Result.error();
+        return userMapper.updateById(user) > 0 ? Result.ok("封禁/解封成功", "") : Result.error("封禁/解封失败");
     }
 
     @Override
@@ -64,7 +64,7 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         user.setAuthorityId(AuthorityConstant.USER);
-        return userMapper.updateById(user) > 0 ? Result.ok() : Result.error();
+        return userMapper.updateById(user) > 0 ? Result.ok("设置成功", "") : Result.error("设置失败");
     }
 
     @Override
@@ -74,7 +74,7 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.POST_NOT_EXIST);
         }
         post.setEnabled(!post.getEnabled());
-        return postMapper.updateById(post) > 0 ? Result.ok() : Result.error();
+        return postMapper.updateById(post) > 0 ? Result.ok("设置成功", "") : Result.error("设置失败");
     }
 
     @Override
@@ -147,6 +147,9 @@ public class AdminServiceImpl implements IAdminService {
         }
         if (searchUserDTO.getGender() != null) {
             search.eq(User::getGender, searchUserDTO.getGender());
+        }
+        if (searchUserDTO.getEnabled() != null) {
+            search.eq(User::getEnabled, searchUserDTO.getEnabled());
         }
         IPage<User> userIPage = userMapper.selectPage(page, search);
         return Result.ok(userIPage.getRecords(), userIPage.getTotal());

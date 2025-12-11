@@ -87,7 +87,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<Long> fanIds = fans.stream().map(fan -> Long.valueOf(fan.toString())).toList();
         // 将帖子添加到粉丝缓存
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
-        return Result.ok();
+        return Result.ok("发布成功", "");
     }
 
     @Override

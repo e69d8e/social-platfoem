@@ -1,6 +1,8 @@
 package com.li.socialplatform.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.li.socialplatform.pojo.dto.SearchPostDTO;
+import com.li.socialplatform.pojo.dto.SearchUserDTO;
 import com.li.socialplatform.pojo.dto.UserDTO;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.pojo.entity.User;
@@ -15,4 +17,8 @@ public interface IUserService extends IService<User> {
     Result updatePassword(UserDTO userDTO);
 
     Result signIn();
+
+    Result listPost(SearchPostDTO searchPostDTO);
+
+    Result listUser(SearchUserDTO searchUserDTO);
 }

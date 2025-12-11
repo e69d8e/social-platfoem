@@ -69,7 +69,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         redisTemplate.opsForSet().add(KeyConstant.FANS_LIST_KEY + id, user.getId());
         // 添加关注
         followMapper.insert(new Follow(null, user.getId(), id, null));
-        return Result.ok();
+        return Result.ok("关注成功", "");
     }
 
     @Override
@@ -87,7 +87,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         // 粉丝数减一
         redisTemplate.opsForSet().remove(KeyConstant.FANS_LIST_KEY + id, user.getId());
         redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
-        return Result.ok();
+        return Result.ok("取关成功", "");
     }
 
     @Override

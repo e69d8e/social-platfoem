@@ -56,7 +56,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (comment.getReplyTo() == null) {
             redisTemplate.opsForZSet().add(KeyConstant.COMMENT_KEY + commentDTO.getPostId() + comment.getId(), comment, System.currentTimeMillis());
         }
-        return Result.ok();
+        return Result.ok("评论成功", "");
     }
 
     @Override

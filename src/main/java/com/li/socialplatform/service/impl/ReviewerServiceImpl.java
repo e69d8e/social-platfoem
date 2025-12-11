@@ -41,7 +41,7 @@ public class ReviewerServiceImpl implements IReviewerService {
         }
         post.setEnabled(!post.getEnabled());
         // 更新数据库
-        return postMapper.updateById(post) > 0 ? Result.ok() : Result.error();
+        return postMapper.updateById(post) > 0 ? Result.ok("封禁/解封成功", "") : Result.error("封禁/解封失败");
     }
 
     @Override
@@ -51,7 +51,7 @@ public class ReviewerServiceImpl implements IReviewerService {
         if (delete) {
             commentMapper.delete(new LambdaQueryWrapper<Comment>().eq(Comment::getParentId, id));
         }
-        return commentMapper.deleteById(id) > 0 ? Result.ok() : Result.error();
+        return commentMapper.deleteById(id) > 0 ? Result.ok("封禁/解封成功", "") : Result.error("封禁/解封失败");
     }
 
     @Override
