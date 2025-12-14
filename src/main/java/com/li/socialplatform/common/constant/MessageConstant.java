@@ -25,4 +25,10 @@ public class MessageConstant {
     public static final String USER_NOT_FOUND = "用户不存在";
     public static final String POST_NOT_EXIST = "该帖子不存在";
     public static final String TITLE_IS_NULL = "标题不能为空";
+    public static final String DELETE_SUCCESS = "删除成功";
+    public static final String PUBLISH_SUCCESS = "发布成功";
+    public static final String BAN_SUCCESS = "封禁/解封成功";
+    public static final String BAN_FAIL = "封禁/解封失败";
+    public static final String SET_SUCCESS = "设置成功";
+    public static final String SET_FAIL = "设置失败";
 }

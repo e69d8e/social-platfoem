@@ -26,4 +26,11 @@ public class UserVO implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
     private String nickname;
+    private Boolean enabled;
+
+    private Boolean fansPrivate;
+    private Boolean followPrivate;
+
+    private Boolean followed;
+    private Integer count;
 }

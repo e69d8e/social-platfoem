@@ -19,16 +19,8 @@ public class MyAuthenticationSuccessHandler implements AuthenticationSuccessHand
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
-        Object principal = authentication.getPrincipal(); // 获取用户信息
-//        Object credentials = authentication.getCredentials(); // 获取用户凭证
-//        Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities(); // 获取用户权限
-        // 封装响应数据
-        Object json = JSON.toJSON(Result.ok());
-        // 设置响应头
         response.setContentType("application/json;charset=UTF-8");
-        // 设置响应状态码
-        response.setStatus(200);
-        // 响应数据
+        Object json = JSON.toJSON(Result.ok("登录成功", ""));
         response.getWriter().write(json.toString());
     }
 }

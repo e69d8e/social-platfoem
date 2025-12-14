@@ -14,9 +14,9 @@ public class MyAccessDeniedHandler implements AccessDeniedHandler {
 
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException, ServletException {
-        Object json = JSON.toJSON(Result.error("该用户没有权限"));
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(403);
+        Object json = JSON.toJSON(Result.error("用户没有权限"));
         response.getWriter().write(json.toString());
     }
 }

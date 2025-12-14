@@ -13,9 +13,8 @@ import java.io.IOException;
 public class MyAuthenticationFailHandler implements AuthenticationFailureHandler {
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException, ServletException {
-        Object json = JSON.toJSON(Result.error("登录失败"));
         response.setContentType("application/json;charset=UTF-8");
-        response.setStatus(401);
+        Object json = JSON.toJSON(Result.error("登录失败"));
         response.getWriter().write(json.toString());
     }
 }

@@ -37,9 +37,13 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
         String key = KeyConstant.LIKE_KEY + postId;
         Boolean member = redisTemplate.opsForSet().isMember(key, userId);
         if (Boolean.TRUE.equals(member)) {
+            // 点赞数-1
+            redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, -1);
             likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, postId).eq(LikeRecord::getUserId, userId));
             redisTemplate.opsForSet().remove(key, userId);
         } else {
+            // 点赞数+1
+            redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, 1);
             likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, postId).eq(LikeRecord::getUserId, userId));
             redisTemplate.opsForSet().add(key, userId);
         }

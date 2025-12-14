@@ -1,5 +1,6 @@
 package com.li.socialplatform.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -7,15 +8,17 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.mapper.AuthorityMapper;
+import com.li.socialplatform.mapper.PostImageMapper;
 import com.li.socialplatform.mapper.PostMapper;
 import com.li.socialplatform.mapper.UserMapper;
-import com.li.socialplatform.pojo.dto.SearchPostDTO;
-import com.li.socialplatform.pojo.dto.SearchUserDTO;
 import com.li.socialplatform.pojo.dto.UserDTO;
 import com.li.socialplatform.pojo.entity.Post;
+import com.li.socialplatform.pojo.entity.PostImage;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.pojo.entity.User;
+import com.li.socialplatform.pojo.vo.PostImageVO;
 import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IUserService;
@@ -23,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -49,6 +53,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final AuthorityMapper authorityMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final PostMapper postMapper;
+    private final PostImageMapper postImageMapper;
+    private final UserIdUtil userIdUtil;
 
     // 密码加密
     private String encodePassword(String password) {
@@ -95,24 +101,33 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     @Override
     public Result getUserProfile(Long id) {
         User user;
+        boolean followed = false;
         if (id == null) {
+            // 查询登录用户的信息
             user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+            if (user == null) {
+                // 用户未登录
+                throw new AccessDeniedException("用户未登录");
+            }
+            id = user.getId();
         } else {
+            // 查询其他用户的信息
             user = userMapper.selectById(id);
             if (user == null) {
                 return Result.error(MessageConstant.USER_NOT_FOUND);
             }
+            // 查询当前用户有没有关注
+            User loginUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+            if (loginUser != null) {
+                followed = Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + loginUser.getId(), id));
+            }
         }
         // 获取角色
-        UserVO userVO = new UserVO();
+        UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
+        Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + id);
+        userVO.setCount(count == null ? 0 : count);
         userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-        userVO.setCreateTime(user.getCreateTime());
-        userVO.setNickname(user.getNickname());
-        userVO.setAvatar(user.getAvatar());
-        userVO.setBio(user.getBio());
-        userVO.setGender(user.getGender());
-        userVO.setId(user.getId());
-        userVO.setUsername(user.getUsername());
+        userVO.setFollowed(followed);
         return Result.ok(userVO);
     }
 
@@ -123,8 +138,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         );
 
         // 更新用户信息
-        user.setNickname(userDTO.getNickname() == null ? user.getNickname() : userDTO.getNickname());
-        user.setAvatar(userDTO.getAvatar() == null ? user.getAvatar() : userDTO.getAvatar());
+        user.setNickname(userDTO.getNickname() == null || userDTO.getNickname().isEmpty() ? user.getNickname() : userDTO.getNickname());
+        user.setAvatar(userDTO.getAvatar() == null || userDTO.getAvatar().isEmpty() ? user.getAvatar() : userDTO.getAvatar());
         user.setBio(userDTO.getBio() == null ? user.getBio() : userDTO.getBio());
         user.setGender(userDTO.getGender() == null ? user.getGender() : userDTO.getGender());
         user.setFansPrivate(userDTO.getFansPrivate() == null ? user.getFansPrivate() : userDTO.getFansPrivate());
@@ -176,22 +191,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result listPost(SearchPostDTO searchPostDTO) {
-        if (searchPostDTO.getPageNum() == null) {
-            searchPostDTO.setPageNum(1);
-        }
-        if (searchPostDTO.getPageSize() == null) {
-            searchPostDTO.setPageSize(10);
-        }
-        if (searchPostDTO.getSearch() == null) {
-            searchPostDTO.setSearch("");
-        }
-        IPage<Post> page = new Page<>(searchPostDTO.getPageNum(), searchPostDTO.getPageSize());
+    public Result listPost(String searchContent, Integer pageNum, Integer pageSize, Integer categoryId) {
+        IPage<Post> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Post> search = new LambdaQueryWrapper<Post>()
-                .like(Post::getContent, searchPostDTO.getSearch())
+                .and(wrapper -> wrapper
+                        .like(Post::getContent, searchContent)
+                        .or()
+                        .like(Post::getTitle, searchContent)
+                )
                 .eq(Post::getEnabled, true);
-        if (searchPostDTO.getCategoryId() != null) {
-            search.eq(Post::getCategoryId, searchPostDTO.getCategoryId());
+        if (categoryId != null) {
+            search = search.eq(Post::getCategoryId, categoryId);
         }
         IPage<Post> postIPage = postMapper.selectPage(page, search);
         List<Post> records = postIPage.getRecords();
@@ -199,46 +209,60 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.ok(List.of(), postIPage.getTotal());
         }
         List<PostVO> postVOS = new ArrayList<>();
+        Long userId = userIdUtil.getUserId();
         for (Post record : records) {
-            PostVO postVO = new PostVO();
-            postVO.setPost(record);
+            List<PostImage> postImages = postImageMapper.selectList(
+                    new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, record.getId()));
+            PostVO postVO = BeanUtil.copyProperties(record, PostVO.class);
+            postVO.setImgUrl(getImgUrl(postImages));
+            postVO.setPostImages(postImagesToPostImagesVOs(postImages));
+            if (userId == null) {
+                postVO.setLiked(false);
+            } else {
+                postVO.setLiked(
+                        redisTemplate.opsForSet()
+                                .isMember(KeyConstant.LIKE_KEY + record.getId(), userId));
+            }
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + record.getId());
+            postVO.setCount(count == null ? 0 : count);
             postVOS.add(postVO);
         }
         return Result.ok(postVOS, postIPage.getTotal());
     }
 
     @Override
-    public Result listUser(SearchUserDTO searchUserDTO) {
-        if (searchUserDTO.getPageNum() == null) {
-            searchUserDTO.setPageNum(1);
-        }
-        if (searchUserDTO.getPageSize() == null) {
-            searchUserDTO.setPageSize(10);
-        }
-        if (searchUserDTO.getNickname() == null) {
-            searchUserDTO.setNickname("");
-        }
-        IPage<User> page = new Page<>(searchUserDTO.getPageNum(), searchUserDTO.getPageSize());
+    public Result listUser(String nickname, Integer pageNum, Integer pageSize, Integer gender) {
+        IPage<User> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<User> search = new LambdaQueryWrapper<User>()
-                .like(User::getNickname, searchUserDTO.getNickname());
-        if (searchUserDTO.getGender() != null) {
-            search.eq(User::getGender, searchUserDTO.getGender());
+                .like(User::getNickname, nickname);
+        if (gender != null) {
+            search.eq(User::getGender, gender);
         }
         IPage<User> userIPage = userMapper.selectPage(page, search);
         List<User> records = userIPage.getRecords();
         List<UserVO> users = new ArrayList<>();
         for (User record : records) {
-            UserVO userVO = new UserVO();
-            userVO.setId(record.getId());
-            userVO.setGender(record.getGender());
-            userVO.setBio(record.getBio());
-            userVO.setAvatar(record.getAvatar());
-            userVO.setUsername(record.getUsername());
-            userVO.setNickname(record.getNickname());
-            userVO.setCreateTime(record.getCreateTime());
+            UserVO userVO = BeanUtil.copyProperties(record, UserVO.class);
             userVO.setAuthority(authorityMapper.selectById(record.getAuthorityId()).getAuthority());
+            userVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), record.getId()));
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + record.getId());
+            userVO.setCount(count == null ? 0 : count);
             users.add(userVO);
         }
         return Result.ok(users, userIPage.getTotal());
+    }
+    private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {
+        List<PostImageVO> postImageVOS = new ArrayList<>();
+        for (PostImage postImage : postImages) {
+            postImageVOS.add(BeanUtil.copyProperties(postImage, PostImageVO.class));
+        }
+        return postImageVOS;
+    }
+
+    private String getImgUrl(List<PostImage> postImages) {
+        if (postImages == null || postImages.isEmpty()) {
+            return systemConstants.defaultPostImg;
+        }
+        return postImages.getFirst().getUrl();
     }
 }

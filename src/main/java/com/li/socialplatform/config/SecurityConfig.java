@@ -3,12 +3,13 @@ package com.li.socialplatform.config;
 import com.li.socialplatform.handler.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-
-import static org.springframework.security.config.Customizer.withDefaults;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity // 开启方法权限控制
@@ -30,12 +31,18 @@ public class SecurityConfig {
                                         "/user/register", // 注册接口
                                         "/test2", // 测试接口
                                         "/user/profile/*", // 查询其他用户信息接口
-                                        "/post/*", // 帖子接口
                                         "/follow/list/followee/{id}", // 其他用户关注列表接口
                                         "/follow/list/{id}", // 其他用户粉丝列表接口
                                         "/comment/post/{id}", // 获取一级评论
-                                        "/comment/post/{id}/{commentId}" // 获取二级评论
+                                        "/comment/post/{id}/{commentId}", // 获取二级评论
+                                        "/post/user/{id}", // 获取用户帖子列表
+                                        "/upload/avatar", // 上传头像
+                                        "/upload/post", // 上传帖子图片
+                                        "/user/list/post", // 获取用户帖子列表
+                                        "/category" // 获取帖子分类
                                 ).permitAll() // 放行
+                                .requestMatchers(HttpMethod.GET, "/post/{id}", "/post/list", "/post/follow/list", "/post/user/{id}").authenticated()
+                                .requestMatchers(HttpMethod.DELETE, "/post/{id}").authenticated()
                                 .requestMatchers(
                                         "/admin/**"
                                 ).hasRole("ADMIN")
@@ -66,7 +73,18 @@ public class SecurityConfig {
 
         );
         // 跨域
-        http.cors(withDefaults());
+        http.cors(cors -> {
+            CorsConfiguration config = new CorsConfiguration();
+            config.addAllowedOrigin("http://127.0.0.1:5173"); // 必须统一为 127.0.0.1或者 localhost
+            config.addAllowedMethod("*");
+            config.addAllowedHeader("*");
+            config.setAllowCredentials(true);
+
+            UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+            source.registerCorsConfiguration("/**", config);
+            cors.configurationSource(source);
+        });
+
         // 关闭csrf攻击防御
         http.csrf(AbstractHttpConfigurer::disable);
         return http.build();

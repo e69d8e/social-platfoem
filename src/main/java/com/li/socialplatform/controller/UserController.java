@@ -1,7 +1,5 @@
 package com.li.socialplatform.controller;
 
-import com.li.socialplatform.pojo.dto.SearchPostDTO;
-import com.li.socialplatform.pojo.dto.SearchUserDTO;
 import com.li.socialplatform.pojo.dto.UserDTO;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.service.IUserService;
@@ -52,13 +50,18 @@ public class UserController {
 
     // 用户搜索帖子
     @GetMapping("/list/post")
-    public Result listPost(@RequestBody SearchPostDTO searchPostDTO) {
-        return userService.listPost(searchPostDTO);
+    public Result listPost(@RequestParam(defaultValue = "") String search,
+                           @RequestParam(defaultValue = "1") Integer pageNum,
+                           @RequestParam(defaultValue = "8") Integer pageSize,
+                           Integer id) {
+        return userService.listPost(search, pageNum, pageSize, id);
     }
 
     // 用户搜索用户
     @GetMapping("/list/user")
-    public Result listUser(@RequestBody SearchUserDTO searchUserDTO) {
-        return userService.listUser(searchUserDTO);
+    public Result listUser(@RequestParam(defaultValue = "") String nickname,
+                           @RequestParam(defaultValue = "1") Integer pageNum,
+                           @RequestParam(defaultValue = "10") Integer pageSize, Integer gender) {
+        return userService.listUser(nickname, pageNum, pageSize, gender);
     }
 }

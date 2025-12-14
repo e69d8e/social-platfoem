@@ -1,7 +1,5 @@
 package com.li.socialplatform.controller;
 
-import com.li.socialplatform.pojo.dto.SearchPostDTO;
-import com.li.socialplatform.pojo.dto.SearchUserDTO;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.service.IAdminService;
 import lombok.RequiredArgsConstructor;
@@ -18,20 +16,19 @@ public class AdminController {
 
     private final IAdminService adminService;
 
-    @GetMapping("/user/list")
-    public Result listAllUser(@RequestBody SearchUserDTO searchUserDTO) {
-        return adminService.listAllUser(searchUserDTO);
-    }
-
-    @GetMapping("/post/list")
-    public Result listAllPost(@RequestBody SearchPostDTO searchPostDTO) {
-        return adminService.listAllPost(searchPostDTO);
-    }
-
     // 封禁解封用户
     @PutMapping("/ban/{id}")
     public Result banUser(@PathVariable Long id) {
         return adminService.banUser(id);
+    }
+
+    // 获取封禁用户
+    @GetMapping("/ban")
+    public Result getBanUser(
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "8") Integer pageSize
+    ) {
+        return adminService.getBanUser(pageNum, pageSize);
     }
 
     // 将用户设为审核
@@ -46,15 +43,5 @@ public class AdminController {
         return adminService.setUser(id);
     }
 
-    // 封禁帖子 解封
-    @PutMapping("/post/{id}")
-    public Result banPost(@PathVariable Long id) {
-        return adminService.banPost(id);
-    }
 
-    // 删除评论
-    @DeleteMapping("/comment/{id}/{postId}")
-    public Result deleteComment(@PathVariable Long id, @PathVariable Long postId) {
-        return adminService.deleteComment(id, postId);
-    }
 }

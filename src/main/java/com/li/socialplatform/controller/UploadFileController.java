@@ -74,7 +74,8 @@ public class UploadFileController {
         // 判断目录是否存在
         File dir = new File(systemConstants.imageUploadDir, StrUtil.format("/{}/{}/{}",type, d1, d2));
         if (!dir.exists()) {
-            dir.mkdirs();
+            boolean mkdir = dir.mkdirs();
+            log.info("创建目录：{}", mkdir);
         }
         // 生成文件名
         return  StrUtil.format("/{}/{}/{}/{}.{}", type, d1, d2, name, suffix);

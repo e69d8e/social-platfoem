@@ -16,5 +16,6 @@ public class SystemConstants {
     public String imageUploadDir;
     public String baseUrl;
     public String defaultPageSize;
-    public String MaxPageSize;
+    public String maxPageSize;
+    public String defaultPostImg;
 }

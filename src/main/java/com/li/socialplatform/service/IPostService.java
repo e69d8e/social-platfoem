@@ -13,4 +13,8 @@ public interface IPostService extends IService<Post> {
     Result listPosts(Long lastId, Integer offset);
 
     Result listFollowPosts(Long lastId, Integer offset);
+
+    Result userListPosts(Long id, Integer pageNum, Integer pageSize);
+
+    Result deletePost(Long id);
 }

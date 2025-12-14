@@ -13,9 +13,8 @@ import java.io.IOException;
 public class MyLogoutHandler implements LogoutSuccessHandler {
     @Override
     public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
-        Object json = JSON.toJSON(Result.ok());
         response.setContentType("application/json;charset=UTF-8");
-        response.setStatus(200);
+        Object json = JSON.toJSON(Result.ok("注销成功", ""));
         response.getWriter().write(json.toString());
     }
 }

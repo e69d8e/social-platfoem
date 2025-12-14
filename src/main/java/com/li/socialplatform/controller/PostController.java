@@ -36,4 +36,17 @@ public class PostController {
     public Result listFollowPosts(@RequestParam Long lastId, @RequestParam(defaultValue = "0") Integer offset) {
         return postService.listFollowPosts(lastId, offset);
     }
+    // 获取某个用户帖子列表
+    @GetMapping("/user/{id}")
+    public Result userListPosts(@PathVariable Long id,
+                                @RequestParam(defaultValue = "1") Integer pageNum,
+                                @RequestParam(defaultValue = "8") Integer pageSize) {
+        return postService.userListPosts(id, pageNum, pageSize);
+    }
+    // 删除帖子
+    @DeleteMapping("/{id}")
+    public Result deletePost(@PathVariable Long id) {
+        return postService.deletePost(id);
+    }
+
 }

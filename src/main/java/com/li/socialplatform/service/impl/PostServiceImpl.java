@@ -1,13 +1,20 @@
 package com.li.socialplatform.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.li.socialplatform.common.constant.AuthorityConstant;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.mapper.*;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
+import com.li.socialplatform.pojo.vo.PostDetailVO;
+import com.li.socialplatform.pojo.vo.PostImageVO;
 import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.service.IPostService;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +41,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final CategoryMapper categoryMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final SystemConstants systemConstants;
-//    private final AuthorityMapper authorityMapper;
+    private final UserIdUtil userIdUtil;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -46,11 +53,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     @Override
     public Result publishPost(PostDTO postDTO) {
         // 获取当前登录用户id
-        Long id = userMapper.selectOne(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, getCurrentUsername())).getId();
-        if (id == null) {
-            return Result.error(MessageConstant.USER_NOT_FOUND);
-        }
+        Long id = userIdUtil.getUserId();
         if (postDTO.getContent() == null || postDTO.getContent().isEmpty()) {
             return Result.error(MessageConstant.CONTENT_IS_NULL);
         }
@@ -78,44 +81,54 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         long time = System.currentTimeMillis();
         // 将帖子添加到缓存中
         redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY, post.getId(), time);
+        redisTemplate.opsForZSet().add(KeyConstant.POST_KEY + id, post.getId(), time);
         // 查询所有粉丝
-        Set<Object> fans = redisTemplate.opsForSet().members(KeyConstant.FANS_LIST_KEY + id);
-        if (fans == null || fans.isEmpty()) {
-            return Result.ok();
-        }
-        // 解析
-        List<Long> fanIds = fans.stream().map(fan -> Long.valueOf(fan.toString())).toList();
+        List<Long> fanIds = getFanIds(id);
         // 将帖子添加到粉丝缓存
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
-        return Result.ok("发布成功", "");
+        return Result.ok(MessageConstant.PUBLISH_SUCCESS, "");
     }
 
     @Override
     public Result getPost(Long id) {
         Post post = postMapper.selectById(id);
-        if (post == null || !post.getEnabled()) {
+        if (post == null) {
             return Result.error(MessageConstant.POST_NOT_EXIST);
+        }
+        // 获取当前用户
+        User loginUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+        if (loginUser != null) {
+            if (!post.getEnabled() && !loginUser.getAuthorityId().equals(AuthorityConstant.REVIEWER)) {
+                return Result.error(MessageConstant.POST_NOT_EXIST);
+            }
+        } else {
+            if (!post.getEnabled()) {
+                return Result.error(MessageConstant.POST_NOT_EXIST);
+            }
         }
         User user = userMapper.selectById(post.getUserId());
         if (user == null) {
             return Result.error(MessageConstant.USER_NOT_FOUND);
         }
-        List<PostImage> postImages = postImageMapper.selectList(new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
-        PostVO postVO = new PostVO();
-        postVO.setPost(post);
-        postVO.setPostImages(postImages);
-//        postVO.setUser(getUserVO(user));
-        postVO.setCategoryName(categoryMapper.selectById(post.getCategoryId()).getName());
+        List<PostImage> postImages = postImageMapper.selectList(
+                new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
         // 查询是否点过赞
         String username = getCurrentUsername();
         User u = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
-        // 如果当前用户未登录默认没有点赞
+        PostDetailVO postDetailVO = BeanUtil.copyProperties(post, PostDetailVO.class);
+        postDetailVO.setCategory(categoryMapper.selectById(post.getCategoryId()).getName());
+        postDetailVO.setPostImages(postImagesToPostImagesVOs(postImages));
+        postDetailVO.setLiked(u != null && Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, u.getId())));
+        Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
+        postDetailVO.setCount(count == null ? 0 : count);
+        postDetailVO.setAvatar(user.getAvatar());
+        postDetailVO.setNickname(user.getNickname());
         if (u == null) {
-            postVO.setLiked(false);
-            return Result.ok(postVO);
+            postDetailVO.setFollowed(false);
+        } else {
+            postDetailVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + u.getId(), user.getId()));
         }
-        postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, u.getId()));
-        return Result.ok(postVO);
+        return Result.ok(postDetailVO);
     }
 
     @Override
@@ -141,6 +154,64 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         return Result.ok(getScrollResult(typedTuples, user.getId()));
     }
 
+    @Override
+    public Result userListPosts(Long id, Integer pageNum, Integer pageSize) {
+        IPage<Post> page = new Page<>(pageNum, pageSize);
+        IPage<Post> postIPage = postMapper.selectPage(page, new LambdaQueryWrapper<Post>().eq(Post::getUserId, id));
+        List<Post> records = postIPage.getRecords();
+        List<PostVO> postVOS = new ArrayList<>();
+        Long userId = userIdUtil.getUserId();
+        for (Post record : records) {
+            List<PostImage> postImages = postImageMapper.selectList(
+                    new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, record.getId()));
+            PostVO postVO = BeanUtil.copyProperties(record, PostVO.class);
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + record.getId());
+            postVO.setCount(count == null ? 0 : count);
+            postVO.setImgUrl(getImgUrl(postImages));
+            postVO.setPostImages(postImagesToPostImagesVOs(postImages));
+            if (userId == null) {
+                postVO.setLiked(false);
+            } else {
+                postVO.setLiked(redisTemplate.opsForSet()
+                        .isMember(KeyConstant.LIKE_KEY + record.getId(), userId));
+            }
+            postVOS.add(postVO);
+        }
+        return Result.ok(postVOS, postIPage.getTotal());
+    }
+
+    @Override
+    public Result deletePost(Long id) {
+        // 当前登录用户id
+        Long userId = userIdUtil.getUserId();
+        // 判断当前用户是不是帖子的拥有者
+        Post post = postMapper.selectOne(new LambdaQueryWrapper<Post>().eq(Post::getUserId, userId).eq(Post::getId, id));
+        if (post == null) {
+            return Result.error(MessageConstant.POST_NOT_EXIST);
+        }
+        // 删除帖子
+        postMapper.deleteById(id);
+        // 删除帖子图片
+        postImageMapper.delete(new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
+        List<Long> fanIds = getFanIds(userId);
+        // 将他的粉丝的缓存中的数据清除
+        for (Long fanId : fanIds) {
+            redisTemplate.opsForZSet().remove(KeyConstant.POST_LIST_KEY + fanId, id);
+        }
+        // 首页帖子删除
+        redisTemplate.opsForZSet().remove(KeyConstant.POST_LIST_KEY, id);
+        return Result.ok(MessageConstant.DELETE_SUCCESS, "");
+    }
+
+    private List<Long> getFanIds(Long userId) {
+        Set<Object> fans = redisTemplate.opsForSet().members(KeyConstant.FANS_LIST_KEY + userId);
+        if (fans == null || fans.isEmpty()) {
+            return List.of();
+        }
+        // 解析
+        return fans.stream().map(fan -> Long.valueOf(fan.toString())).toList();
+    }
+
     private ScrollResult<PostVO> getScrollResult(Set<ZSetOperations.TypedTuple<Object>> typedTuples, Long userId) {
         if (typedTuples == null || typedTuples.isEmpty()) {
             ScrollResult<PostVO> objectScrollResult = new ScrollResult<>();
@@ -160,7 +231,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
                 .map(ZSetOperations.TypedTuple::getScore).toList();
         List<PostVO> postVOS = new ArrayList<>();
         for (Long id : ids) {
-            PostVO postVO = new PostVO();
             Post post = postMapper.selectById(id);
             if (post == null) {
                 continue;
@@ -168,15 +238,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             if (!post.getEnabled()) {
                 continue;
             }
-            postVO.setPost(post);
-            postVO.setCategoryName(categoryMapper.selectById(postVO.getPost().getCategoryId()).getName());
-//            postVO.setUser(getUserVO(userMapper.selectById(post.getUserId())));
-            postVO.setPostImages(postImageMapper.selectList(
-                    new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id)));
+            List<PostImage> postImages = postImageMapper.selectList(
+                    new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
+            PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
+            postVO.setPostImages(postImagesToPostImagesVOs(postImages));
+            postVO.setImgUrl(getImgUrl(postImages));
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
+            postVO.setCount(count == null ? 0 : count);
             if (userId == null) {
                 postVO.setLiked(false);
             } else {
-                postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
+                postVO.setLiked(Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
             }
             postVOS.add(postVO);
         }
@@ -196,16 +268,19 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         postVOScrollResult.setMinTime(scores.getLast().longValue());
         return postVOScrollResult;
     }
-//    private UserVO getUserVO(User user) {
-//        UserVO userVO = new UserVO();
-//        userVO.setId(user.getId());
-//        userVO.setUsername(user.getUsername());
-//        userVO.setNickname(user.getNickname());
-//        userVO.setAvatar(user.getAvatar());
-//        userVO.setBio(user.getBio());
-//        userVO.setGender(user.getGender());
-//        userVO.setCreateTime(user.getCreateTime());
-//        userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-//        return userVO;
-//    }
+
+    private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {
+        List<PostImageVO> postImageVOS = new ArrayList<>();
+        for (PostImage postImage : postImages) {
+            postImageVOS.add(BeanUtil.copyProperties(postImage, PostImageVO.class));
+        }
+        return postImageVOS;
+    }
+
+    private String getImgUrl(List<PostImage> postImages) {
+        if (postImages == null || postImages.isEmpty()) {
+            return systemConstants.defaultPostImg;
+        }
+        return postImages.getFirst().getUrl();
+    }
 }

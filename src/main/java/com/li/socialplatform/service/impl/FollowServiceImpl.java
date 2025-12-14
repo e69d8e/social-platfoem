@@ -1,8 +1,7 @@
 package com.li.socialplatform.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
@@ -18,12 +17,15 @@ import com.li.socialplatform.service.IFollowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * @author e69d8e
@@ -67,8 +69,28 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, 1);
         // 缓存粉丝列表
         redisTemplate.opsForSet().add(KeyConstant.FANS_LIST_KEY + id, user.getId());
+        // 缓存关注列表
+        redisTemplate.opsForSet().add(KeyConstant.FOLLOW_LIST + user.getId(), id);
         // 添加关注
         followMapper.insert(new Follow(null, user.getId(), id, null));
+        // 将要关注用户的帖子查找出来
+        Set<ZSetOperations.TypedTuple<Object>> typedTuples =
+                redisTemplate.opsForZSet().rangeWithScores(KeyConstant.POST_KEY + id, 0, -1);
+        if (typedTuples == null || typedTuples.isEmpty()) {
+            return Result.ok("关注成功", "");
+        }
+        // 解析
+        // 获取 id
+        List<Long> ids = typedTuples.stream()
+                .map(ZSetOperations.TypedTuple::getValue).map(String::valueOf).map(Long::valueOf).toList();
+        // 获取 score
+        List<Double> scores = typedTuples.stream()
+                .map(ZSetOperations.TypedTuple::getScore).toList();
+        // 关注后要将该用户的所有帖子推送到我的关注
+        String key = KeyConstant.POST_LIST_KEY + user.getId();
+        for (int i = 0; i < ids.size(); i++) {
+            redisTemplate.opsForZSet().add(key, ids.get(i), scores.get(i));
+        }
         return Result.ok("关注成功", "");
     }
 
@@ -84,9 +106,28 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (delete == 0) {
             return Result.error(MessageConstant.USER_NOT_FOLLOWED, List.of());
         }
+        // 获取当前用户id
+        User u = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+        if (Objects.equals(u.getId(), id)) {
+            return Result.error(MessageConstant.USER_CANNOT_FOLLOW_SELF);
+        }
         // 粉丝数减一
         redisTemplate.opsForSet().remove(KeyConstant.FANS_LIST_KEY + id, user.getId());
         redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
+        redisTemplate.opsForSet().remove(KeyConstant.FOLLOW_LIST + u.getId(), id);
+        // 将要取关的用户的帖子查找出来
+        Set<ZSetOperations.TypedTuple<Object>> typedTuples =
+                redisTemplate.opsForZSet().rangeWithScores(KeyConstant.POST_KEY + id, 0, -1);
+        if (typedTuples == null || typedTuples.isEmpty()) {
+            return Result.ok("取关成功", "");
+        }
+        List<Object> ids = typedTuples.stream()
+                .map(ZSetOperations.TypedTuple::getValue).toList();
+        // 删除要取关用户的帖子
+        String key = KeyConstant.POST_LIST_KEY + user.getId();
+        for (Object o : ids) {
+            redisTemplate.opsForZSet().remove(key, o);
+        }
         return Result.ok("取关成功", "");
     }
 
@@ -102,6 +143,10 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
                 return Result.error(MessageConstant.USER_FANS_PRIVATE, List.of());
             }
         }
+        return getUserList(id, pageNum, pageSize);
+    }
+
+    private Result getUserList (Long id, Integer pageNum, Integer pageSize) {
         List<Long> ids = Objects.requireNonNull(redisTemplate.opsForSet().members(KeyConstant.FANS_LIST_KEY + id))
                 .stream().map(member -> Long.valueOf(member.toString())).toList();
         if (ids.isEmpty()) {
@@ -110,11 +155,22 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if ((pageNum - 1) * pageSize > ids.size()) {
             return Result.ok(List.of());
         }
+        // 获取当前用户
+        User u = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         ids = ids.stream().skip((long) (pageNum - 1) * pageSize).limit(pageSize).toList();
         List<User> users = userMapper.selectByIds(ids);
-        List<UserVO> userVOs = users.stream().map(user -> new UserVO(user.getId(), user.getUsername(), user.getAvatar(),
-                user.getBio(), user.getGender(), authorityMapper.selectById(user.getAuthorityId()).getAuthority(),
-                user.getCreateTime(), user.getNickname())).toList();
+        List<UserVO> userVOs = users.stream().map(user -> {
+            UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
+            userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
+            userVO.setCount(count == null ? 0 : count);
+            if (u != null) {
+                userVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + u.getId(), user.getId()));
+            } else {
+                userVO.setFollowed(false);
+            }
+            return userVO;
+        }).toList();
         return Result.ok(userVOs, (long) ids.size());
     }
 
@@ -130,14 +186,19 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             }
         }
         // 查询该用户关注列表
-        IPage<Follow> page = new Page<>(pageNum, pageSize);
-        IPage<Follow> followIPage = followMapper.selectPage(page, new LambdaQueryWrapper<Follow>().eq(Follow::getFollowerId, id));
-        List<Follow> follows = followIPage.getRecords();
-        if (follows.isEmpty()) {
-            return Result.ok(List.of(), followIPage.getTotal());
-        }
-        List<Long> ids = follows.stream().map(Follow::getFolloweeId).toList();
+        List<Long> ids = Objects.requireNonNull(redisTemplate.opsForSet().members(KeyConstant.FOLLOW_LIST + id))
+                .stream().map(member -> Long.valueOf(member.toString())).toList();
+        ids = ids.stream().skip((long) (pageNum - 1) * pageSize).limit(pageSize).toList();
         List<User> users = userMapper.selectByIds(ids);
-        return Result.ok(users, followIPage.getTotal());
+        List<UserVO> userVOs = new ArrayList<>();
+        for (User user : users) {
+            UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
+            userVO.setFollowed(true);
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
+            userVO.setCount(count == null ? 0 : count);
+            userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
+            userVOs.add(userVO);
+        }
+        return Result.ok(userVOs, (long) ids.size());
     }
 }
