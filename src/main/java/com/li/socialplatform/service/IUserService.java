@@ -16,6 +16,8 @@ public interface IUserService extends IService<User> {
 
     Result signIn();
 
+    Result signInCount();
+
     Result listPost(String search, Integer pageNum, Integer pageSize, Integer categoryId);
 
     Result listUser(String nickname, Integer pageNum, Integer pageSize, Integer gender);

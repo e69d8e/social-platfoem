@@ -191,6 +191,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
+    public Result signInCount() {
+        LocalDateTime now = LocalDateTime.now();
+        String key = KeyConstant.SIGN_IN_KEY + getCurrentUsername() + now.format(DateTimeFormatter.ofPattern("yyyyMM"));
+        List<Long> longs = redisTemplate.opsForValue().bitField(key,
+                BitFieldSubCommands.create()
+                        .get(BitFieldSubCommands.BitFieldType.unsigned(now.getDayOfMonth()))
+                        .valueAt(0) // 从第0位开始读取
+        );
+        Long tmp = null;
+        if (longs != null) {
+            tmp = longs.getFirst();
+        }
+        int count = 0;
+        while (tmp != null && tmp != 0) {
+            if ((tmp & 1) == 1) {
+                count++;
+            } else {
+                break;
+            }
+            tmp = tmp >>> 1;
+        }
+        return Result.ok(count);
+    }
+
+    @Override
     public Result listPost(String searchContent, Integer pageNum, Integer pageSize, Integer categoryId) {
         IPage<Post> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Post> search = new LambdaQueryWrapper<Post>()
@@ -251,6 +276,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
         return Result.ok(users, userIPage.getTotal());
     }
+
+
+
     private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {
         List<PostImageVO> postImageVOS = new ArrayList<>();
         for (PostImage postImage : postImages) {

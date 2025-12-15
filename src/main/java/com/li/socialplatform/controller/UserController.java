@@ -48,6 +48,12 @@ public class UserController {
         return userService.signIn();
     }
 
+    // 获取当月签到次数
+    @GetMapping("/sign")
+    public Result signInCount() {
+        return userService.signInCount();
+    }
+
     // 用户搜索帖子
     @GetMapping("/list/post")
     public Result listPost(@RequestParam(defaultValue = "") String search,
