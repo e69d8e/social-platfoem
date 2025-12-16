@@ -63,6 +63,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String result = encoder.encode(password);
         return "{bcrypt}" + result;
     }
+    // 获取当前登录用户的用户名
+    private String getCurrentUsername() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth.getName();
+    }
 
     @Override
     public Result register(UserDTO userDTO) {
@@ -87,16 +92,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         user.setNickname(systemConstants.userNicknamePrefix + uuid);
         user.setPassword(encodePassword(userDTO.getPassword()));
         user.setUsername(userDTO.getUsername());
-
+        user.setAvatar(systemConstants.defaultAvatar);
         userMapper.insert(user);
-        return Result.ok("注册成功", "");
+        return Result.ok(MessageConstant.REGISTER_SUCCESS, "");
     }
 
-    // 获取当前登录用户的用户名
-    private String getCurrentUsername() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth.getName();
-    }
+
 
     @Override
     public Result getUserProfile(Long id) {
@@ -117,9 +118,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
                 return Result.error(MessageConstant.USER_NOT_FOUND);
             }
             // 查询当前用户有没有关注
-            User loginUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
-            if (loginUser != null) {
-                followed = Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + loginUser.getId(), id));
+            Long userId = userIdUtil.getUserId();
+            if (userId != null) {
+                Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userId, id);
+                followed = score != null;
             }
         }
         // 获取角色
@@ -136,9 +138,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         User user = userMapper.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername())
         );
-
+        if (userDTO.getGender() == null || userDTO.getGender() < 0 || userDTO.getGender() > 2) {
+            return Result.error(MessageConstant.USER_INFO_ERROR);
+        }
+        if (userDTO.getNickname() == null || userDTO.getNickname().isEmpty() || userDTO.getNickname().length() > Integer.parseInt(systemConstants.nicknameMaxLength)) {
+            return Result.error(MessageConstant.NICKNAME_ERROR);
+        }
+        if (userDTO.getAvatar() == null || userDTO.getAvatar().isEmpty()) {
+            return Result.error(MessageConstant.USER_INFO_ERROR);
+        }
+        if (userDTO.getBio() != null && userDTO.getBio().length() > Integer.parseInt(systemConstants.bioMaxLength)) {
+            return Result.error(MessageConstant.BIO_ERROR);
+        }
+        if (user == null) {
+            return Result.error(MessageConstant.USER_NOT_FOUND);
+        }
         // 更新用户信息
-        user.setNickname(userDTO.getNickname() == null || userDTO.getNickname().isEmpty() ? user.getNickname() : userDTO.getNickname());
+        user.setNickname(userDTO.getNickname());
         user.setAvatar(userDTO.getAvatar() == null || userDTO.getAvatar().isEmpty() ? user.getAvatar() : userDTO.getAvatar());
         user.setBio(userDTO.getBio() == null ? user.getBio() : userDTO.getBio());
         user.setGender(userDTO.getGender() == null ? user.getGender() : userDTO.getGender());
@@ -269,7 +285,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         for (User record : records) {
             UserVO userVO = BeanUtil.copyProperties(record, UserVO.class);
             userVO.setAuthority(authorityMapper.selectById(record.getAuthorityId()).getAuthority());
-            userVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), record.getId()));
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), record.getId());
+            userVO.setFollowed(score != null);
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + record.getId());
             userVO.setCount(count == null ? 0 : count);
             users.add(userVO);

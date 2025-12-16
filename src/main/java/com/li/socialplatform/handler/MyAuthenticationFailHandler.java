@@ -14,7 +14,7 @@ public class MyAuthenticationFailHandler implements AuthenticationFailureHandler
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException, ServletException {
         response.setContentType("application/json;charset=UTF-8");
-        Object json = JSON.toJSON(Result.error("登录失败"));
+        Object json = JSON.toJSON(Result.error(exception.getMessage()));
         response.getWriter().write(json.toString());
     }
 }

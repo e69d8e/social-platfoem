@@ -18,4 +18,9 @@ public class SystemConstants {
     public String defaultPageSize;
     public String maxPageSize;
     public String defaultPostImg;
+    public String defaultAvatar;
+    public String titleMaxLength;
+    public String contentMaxLength;
+    public String nicknameMaxLength;
+    public String bioMaxLength;
 }

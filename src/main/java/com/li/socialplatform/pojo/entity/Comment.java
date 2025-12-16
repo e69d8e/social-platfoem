@@ -1,14 +1,12 @@
 package com.li.socialplatform.pojo.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 /**
  * @author e69d8e
@@ -27,8 +25,11 @@ public class Comment implements Serializable {
     private Long userId;
     @TableField(value = "content")
     private String content;
-    @TableField(value = "create_time")
-    private String createTime;
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
+    private LocalDateTime createTime;
+//    // 不是数据库字段，只是为了返回给前端
+//    @TableField(exist = false)
+//    private String time;
     @TableField(value = "parent_id")
     private Long parentId;
     @TableField(value = "reply_to")

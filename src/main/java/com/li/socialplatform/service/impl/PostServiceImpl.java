@@ -60,12 +60,19 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         Post post = new Post();
         post.setUserId(id);
         String title = postDTO.getTitle();
-        if (title == null || title.isEmpty()) {
+        // 限制帖子标题字数
+        if (title.length() > Integer.parseInt(systemConstants.titleMaxLength)) {
+            return Result.error(MessageConstant.TITLE_TOO_LONG);
+        }
+        if (title.isEmpty()) {
             return Result.error(MessageConstant.TITLE_IS_NULL);
         }
         post.setTitle(title);
         String content = postDTO.getContent();
-        if (content == null || content.isEmpty()) {
+        if (content.length() > Integer.parseInt(systemConstants.contentMaxLength)) {
+            return Result.error(MessageConstant.CONTENT_TOO_LONG);
+        }
+        if (content.isEmpty()) {
             return Result.error(MessageConstant.CONTENT_IS_NULL);
         }
         post.setContent(content);
@@ -113,20 +120,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<PostImage> postImages = postImageMapper.selectList(
                 new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
         // 查询是否点过赞
-        String username = getCurrentUsername();
-        User u = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        Long userId = userIdUtil.getUserId();
         PostDetailVO postDetailVO = BeanUtil.copyProperties(post, PostDetailVO.class);
         postDetailVO.setCategory(categoryMapper.selectById(post.getCategoryId()).getName());
         postDetailVO.setPostImages(postImagesToPostImagesVOs(postImages));
-        postDetailVO.setLiked(u != null && Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, u.getId())));
+        postDetailVO.setLiked(
+                userId != null && Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
         Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
         postDetailVO.setCount(count == null ? 0 : count);
         postDetailVO.setAvatar(user.getAvatar());
         postDetailVO.setNickname(user.getNickname());
-        if (u == null) {
+        if (userId == null) {
             postDetailVO.setFollowed(false);
         } else {
-            postDetailVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + u.getId(), user.getId()));
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userId, user.getId());
+            postDetailVO.setFollowed(score != null);
         }
         return Result.ok(postDetailVO);
     }
@@ -137,21 +145,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
                 0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
         // 获取当前用户
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
-        if (user == null) {
+        Long userId = userIdUtil.getUserId();
+        if (userId == null) {
             return Result.ok(getScrollResult(typedTuples, null));
         }
-        return Result.ok(getScrollResult(typedTuples, user.getId()));
+        return Result.ok(getScrollResult(typedTuples, userId));
     }
 
     @Override
     public Result listFollowPosts(Long lastId, Integer offset) {
         // 获取当前用户
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+        Long userId = userIdUtil.getUserId();
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
-                .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY + user.getId(),
+                .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY + userId,
                         0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
-        return Result.ok(getScrollResult(typedTuples, user.getId()));
+        return Result.ok(getScrollResult(typedTuples, userId));
     }
 
     @Override
@@ -204,7 +212,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     }
 
     private List<Long> getFanIds(Long userId) {
-        Set<Object> fans = redisTemplate.opsForSet().members(KeyConstant.FANS_LIST_KEY + userId);
+        Set<Object> fans = redisTemplate.opsForZSet().range(KeyConstant.FANS_LIST_KEY + userId, 0, -1);
         if (fans == null || fans.isEmpty()) {
             return List.of();
         }

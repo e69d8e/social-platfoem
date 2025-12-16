@@ -25,7 +25,7 @@ public class ReviewerController {
     // 查询当前用户封禁的帖子
     @GetMapping("/post/ban")
     public Result listBanPost(
-            @RequestParam(defaultValue = "1") String pageNum,
+            @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "8") Integer pageSize
     ) {
         return reviewerService.listBanPost(pageNum, pageSize);

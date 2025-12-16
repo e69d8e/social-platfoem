@@ -37,9 +37,9 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         if (user.getEnabled()) {
-            redisTemplate.opsForSet().add(KeyConstant.BAN_USER_KEY, id);
+            redisTemplate.opsForZSet().add(KeyConstant.BAN_USER_KEY, id, System.currentTimeMillis());
         } else {
-            redisTemplate.opsForSet().remove(KeyConstant.BAN_USER_KEY, id);
+            redisTemplate.opsForZSet().remove(KeyConstant.BAN_USER_KEY, id);
         }
         user.setEnabled(!user.getEnabled());
         return userMapper.updateById(user) > 0 ? Result.ok(MessageConstant.BAN_SUCCESS, "") : Result.error(MessageConstant.BAN_FAIL);
@@ -47,7 +47,19 @@ public class AdminServiceImpl implements IAdminService {
 
     @Override
     public Result getBanUser(Integer pageNum, Integer pageSize) {
-        Set<Object> members = redisTemplate.opsForSet().members(KeyConstant.BAN_USER_KEY);
+        long start = ((long) (pageNum - 1) * pageSize);
+        long end = start + pageSize - 1;
+        Long total = redisTemplate.opsForZSet().size(KeyConstant.BAN_USER_KEY);
+        if (total == null) {
+            return Result.ok(List.of(), 0L);
+        }
+        if (start > total) {
+            return Result.ok(List.of(), 0L);
+        }
+        if (end > total) {
+            end = total - 1;
+        }
+        Set<Object> members = redisTemplate.opsForZSet().range(KeyConstant.BAN_USER_KEY, start, end);
         if (members == null || members.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -58,12 +70,13 @@ public class AdminServiceImpl implements IAdminService {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
             userVO.setEnabled(false);
             userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-            userVO.setFollowed(redisTemplate.opsForSet().isMember(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), user.getId()));
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), id);
+            userVO.setFollowed(score != null);
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
             userVO.setCount(count == null ? 0 : count);
             users.add(userVO);
         }
-        return Result.ok(users, Long.valueOf(users.size()));
+        return Result.ok(users, total);
     }
 
     @Override

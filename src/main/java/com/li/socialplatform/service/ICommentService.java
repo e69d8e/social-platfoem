@@ -9,6 +9,4 @@ public interface ICommentService extends IService<Comment> {
     Result addComment(CommentDTO commentDTO);
 
     Result getComments(Long id, Long lastId, Integer offset);
-
-    Result getTwoComments(Long postId, Long commentId);
 }

@@ -3,16 +3,13 @@ package com.li.socialplatform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
+import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.mapper.LikeMapper;
-import com.li.socialplatform.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.LikeRecord;
 import com.li.socialplatform.pojo.entity.Result;
-import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.service.ILikeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,16 +21,12 @@ import org.springframework.stereotype.Service;
 public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> implements ILikeService {
 
     private final LikeMapper likeMapper;
-    private final UserMapper userMapper;
     private final RedisTemplate<String, Object> redisTemplate;
-    // 获取当前登录用户的用户名
-    private Long getCurrentId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, auth.getName())).getId();
-    }
+    private final UserIdUtil userIdUtil;
+
     @Override
     public Result like(Long postId) {
-        Long userId = getCurrentId();
+        Long userId = userIdUtil.getUserId();
         String key = KeyConstant.LIKE_KEY + postId;
         Boolean member = redisTemplate.opsForSet().isMember(key, userId);
         if (Boolean.TRUE.equals(member)) {

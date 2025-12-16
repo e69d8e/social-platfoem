@@ -43,18 +43,30 @@ public class ReviewerServiceImpl implements IReviewerService {
         post.setEnabled(!post.getEnabled());
         // 将封禁的帖子加入缓存中
         if (!post.getEnabled()) {
-            redisTemplate.opsForSet().add(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id);
+            redisTemplate.opsForZSet().add(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id, System.currentTimeMillis());
         } else {
-            redisTemplate.opsForSet().remove(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id);
+            redisTemplate.opsForZSet().remove(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id);
         }
         // 更新数据库
         return postMapper.updateById(post) > 0 ? Result.ok(MessageConstant.BAN_SUCCESS, "") : Result.error(MessageConstant.BAN_FAIL);
     }
 
     @Override
-    public Result listBanPost(String pageNum, Integer pageSize) {
+    public Result listBanPost(Integer pageNum, Integer pageSize) {
+        long start = ((long) (pageNum - 1) * pageSize);
+        long end = start + pageSize - 1;
         Long userId = userIdUtil.getUserId();
-        Set<Object> members = redisTemplate.opsForSet().members(KeyConstant.BAN_POST_KEY + userId);
+        Long total = redisTemplate.opsForZSet().size(KeyConstant.BAN_POST_KEY + userId);
+        if (total == null) {
+            return Result.ok(List.of(), 0L);
+        }
+        if (start > total) {
+            return Result.ok(List.of(), 0L);
+        }
+        if (end > total) {
+            end = total - 1;
+        }
+        Set<Object> members = redisTemplate.opsForZSet().range(KeyConstant.BAN_POST_KEY + userId, start, end);
         if (members == null || members.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -75,7 +87,7 @@ public class ReviewerServiceImpl implements IReviewerService {
             postVO.setEnabled(false);
             postVOS.add(postVO);
         }
-        return Result.ok(postVOS, Long.valueOf(ids.size()));
+        return Result.ok(postVOS, total);
     }
 
     private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {
