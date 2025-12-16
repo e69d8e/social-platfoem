@@ -30,4 +30,10 @@ public class ReviewerController {
     ) {
         return reviewerService.listBanPost(pageNum, pageSize);
     }
+
+    // 删除评论
+    @DeleteMapping("/comment/{postId}/{id}")
+    public Result deleteComment(@PathVariable("id") Long id, @PathVariable("postId") Long postId) {
+        return reviewerService.deleteComment(id, postId);
+    }
 }

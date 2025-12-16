@@ -42,6 +42,4 @@ public class AdminController {
     public Result setUser(@PathVariable Long id) {
         return adminService.setUser(id);
     }
-
-
 }

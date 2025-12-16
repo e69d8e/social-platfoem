@@ -6,6 +6,7 @@ import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.mapper.CommentMapper;
 import com.li.socialplatform.mapper.PostImageMapper;
 import com.li.socialplatform.mapper.PostMapper;
 import com.li.socialplatform.pojo.entity.*;
@@ -33,6 +34,7 @@ public class ReviewerServiceImpl implements IReviewerService {
     private final PostImageMapper postImageMapper;
     private final SystemConstants systemConstants;
     private final UserIdUtil userIdUtil;
+    private final CommentMapper commentMapper;
 
     @Override
     public Result banPost(Long id) {
@@ -88,6 +90,13 @@ public class ReviewerServiceImpl implements IReviewerService {
             postVOS.add(postVO);
         }
         return Result.ok(postVOS, total);
+    }
+
+    @Override
+    public Result deleteComment(Long id, Long postId) {
+        redisTemplate.opsForZSet().remove(KeyConstant.COMMENT_KEY + postId, id);
+        commentMapper.deleteById(id);
+        return Result.ok(MessageConstant.DELETE_SUCCESS, "");
     }
 
     private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {
