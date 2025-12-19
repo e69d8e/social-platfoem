@@ -66,12 +66,11 @@ class SocialPlatformApplicationTests {
     @Test
     void testQuery() {
         // 创建查询对象
-        Criteria criteria = Criteria.where("title").contains("")
-                .or("content").contains("");
+        Criteria criteria = Criteria.where("title").contains("11");
         Query query = new CriteriaQuery(criteria);
         SearchHits<Post> hits = elasticsearchOperations.search(query, Post.class);
         List<Post> posts = hits.stream().map(SearchHit::getContent).toList();
-        System.out.println(posts.toArray().length);
+        System.out.println(posts);
         // 获取查询结果
 //        hits.getSearchHits().forEach(hit -> {
 //            System.out.println(hit.getContent());

@@ -97,6 +97,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
         // 添加帖子存到ES中
         post.setCount(0);
+        post.setEnabled(true);
         elasticsearchOperations.save(post);
         return Result.ok(MessageConstant.PUBLISH_SUCCESS, "");
     }

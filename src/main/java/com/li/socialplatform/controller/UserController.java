@@ -17,17 +17,17 @@ public class UserController {
 
     private final IUserService userService;
     // 注册
-    @RequestMapping("/register")
+    @PostMapping("/register")
     public Result register(@RequestBody UserDTO userDTO) {
         return userService.register(userDTO);
     }
     // 获取当前用户信息
-    @RequestMapping("/profile")
+    @GetMapping("/profile")
     public Result getUserProfile() {
         return userService.getUserProfile(null);
     }
     // 获取用户信息
-    @RequestMapping("/profile/{id}")
+    @GetMapping("/profile/{id}")
     public Result getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
     }
@@ -56,18 +56,21 @@ public class UserController {
 
     // 用户搜索帖子
     @GetMapping("/list/post")
-    public Result listPost(@RequestParam(defaultValue = "") String search,
+    public Result listPost(@RequestParam(defaultValue = "") String keyword,
+                           @RequestParam(defaultValue = "") Integer categoryId,
                            @RequestParam(defaultValue = "1") Integer pageNum,
-                           @RequestParam(defaultValue = "8") Integer pageSize,
-                           Integer id) {
-        return userService.listPost(search, pageNum, pageSize, id);
+                           @RequestParam(defaultValue = "8") Integer pageSize
+                           ) {
+        return userService.listPost(keyword, categoryId, pageNum, pageSize);
     }
 
     // 用户搜索用户
     @GetMapping("/list/user")
-    public Result listUser(@RequestParam(defaultValue = "") String nickname,
+    public Result listUser(@RequestParam(defaultValue = "") String keyword,
+                           @RequestParam(defaultValue = "") Integer gender,
                            @RequestParam(defaultValue = "1") Integer pageNum,
-                           @RequestParam(defaultValue = "10") Integer pageSize, Integer gender) {
-        return userService.listUser(nickname, pageNum, pageSize, gender);
+                           @RequestParam(defaultValue = "12") Integer pageSize
+                           ) {
+        return userService.listUser(keyword, gender, pageNum, pageSize);
     }
 }

@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--根元素，配置 Logback
+scan="true"：开启配置文件自动重新加载
+scanPeriod="60 seconds"：每60秒检查一次配置文件是否有变化-->
 <configuration scan="true" scanPeriod="60 seconds">
 
     <!-- 设置日志输出格式 -->
     <property name="LOG_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
+
+    <!-- 彩色日志格式定义 -->
+    <property name="COLOR_LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) %cyan(%logger{50}) - %msg%n"/>
 
     <!-- 日志文件路径 -->
     <property name="LOG_PATH" value="./logs"/>
@@ -11,22 +18,29 @@
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
+            <pattern>${COLOR_LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
     <!-- 写入 info.log 的文件输出（按天滚动） -->
     <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!--当前活跃日志文件路径：./logs/info.log-->
         <file>${LOG_PATH}/info.log</file>
+        <!--使用基于时间的滚动策略（按时间分割日志-->
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- 每天生成新日志 -->
+            <!-- 每天生成新日志 滚动后的文件名模式：info.2023-10-01.log.gz -->
             <fileNamePattern>${LOG_PATH}/info.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
-            <!-- 保留30天 -->
+            <!-- 保留最近30天的日志文件，自动删除更旧的 -->
             <maxHistory>30</maxHistory>
         </rollingPolicy>
+        <!--使用之前定义的 LOG_PATTERN 格式（无颜色）-->
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
         </encoder>
+        <!--添加过滤器
+        只接受 INFO 级别的日志
+        onMatch=ACCEPT：匹配时接受
+        onMismatch=DENY：不匹配时拒绝-->
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>INFO</level>
             <onMatch>ACCEPT</onMatch>
@@ -35,9 +49,11 @@
     </appender>
 
     <!-- 全局日志配置 -->
+    <!-- 配置根记录器（root logger） 日志级别为 INFO（会记录 INFO、WARN、ERROR）-->
     <root level="INFO">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="INFO_FILE" />
+        <!-- 根记录器同时输出到控制台和 INFO_FILE 文件-->
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="INFO_FILE"/>
     </root>
 
 </configuration>
