@@ -19,6 +19,7 @@ import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.service.IPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.Authentication;
@@ -42,6 +43,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final RedisTemplate<String, Object> redisTemplate;
     private final SystemConstants systemConstants;
     private final UserIdUtil userIdUtil;
+    private final ElasticsearchOperations elasticsearchOperations;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -93,6 +95,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<Long> fanIds = getFanIds(id);
         // 将帖子添加到粉丝缓存
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
+        // 添加帖子存到ES中
+        post.setCount(0);
+        elasticsearchOperations.save(post);
         return Result.ok(MessageConstant.PUBLISH_SUCCESS, "");
     }
 

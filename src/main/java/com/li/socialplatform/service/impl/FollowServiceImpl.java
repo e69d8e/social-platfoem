@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
-import com.li.socialplatform.common.exception.MethodArgumentNotValidException;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.mapper.AuthorityMapper;
 import com.li.socialplatform.mapper.FollowMapper;
@@ -17,6 +16,7 @@ import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IFollowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
@@ -40,11 +40,12 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
     private final UserMapper userMapper;
     private final AuthorityMapper authorityMapper;
     private final UserIdUtil userIdUtil;
+    private final ElasticsearchOperations elasticsearchOperations;
 
     @Override
     public Result follow(Long id) {
         if (id == null) {
-            throw new MethodArgumentNotValidException(MessageConstant.ID_IS_NULL);
+            return Result.error(MessageConstant.ID_IS_NULL);
         }
         // 获取当前用户id
         Long userId = userIdUtil.getUserId();
@@ -62,13 +63,21 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         }
         long time = System.currentTimeMillis();
         // 粉丝数加一
-        redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, 1);
+        Long increment = redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, 1);
         // 缓存粉丝列表
         redisTemplate.opsForZSet().add(KeyConstant.FANS_LIST_KEY + id, userId, time);
         // 缓存关注列表
         redisTemplate.opsForZSet().add(KeyConstant.FOLLOW_LIST + userId, id, time);
         // 添加关注
         followMapper.insert(new Follow(null, userId, id, null));
+        // 更新 ElasticSearch
+        User user = elasticsearchOperations.get(id.toString(), User.class);
+        if (user != null) {
+            if (increment != null) {
+                user.setCount(increment.intValue());
+                elasticsearchOperations.save(user);
+            }
+        }
         // 将要关注用户的帖子查找出来
         Set<ZSetOperations.TypedTuple<Object>> typedTuples =
                 redisTemplate.opsForZSet().rangeWithScores(KeyConstant.POST_KEY + id, 0, -1);
@@ -93,7 +102,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
     @Override
     public Result cancelFollow(Long id) {
         if (id == null) {
-            throw new MethodArgumentNotValidException(MessageConstant.ID_IS_NULL);
+            return Result.error(MessageConstant.ID_IS_NULL);
         }
         // 获取当前用户id
         Long userId = userIdUtil.getUserId();
@@ -108,9 +117,17 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             return Result.error(MessageConstant.USER_CANNOT_FOLLOW_SELF);
         }
         // 粉丝数减一
+        Long increment = redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
         redisTemplate.opsForZSet().remove(KeyConstant.FANS_LIST_KEY + id, userId);
-        redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
         redisTemplate.opsForZSet().remove(KeyConstant.FOLLOW_LIST + userId, id);
+        // 更新 ElasticSearch
+        User user = elasticsearchOperations.get(id.toString(), User.class);
+        if (user != null) {
+            if (increment != null) {
+                user.setCount(increment.intValue());
+                elasticsearchOperations.save(user);
+            }
+        }
         // 将要取关的用户的帖子查找出来
         Set<ZSetOperations.TypedTuple<Object>> typedTuples =
                 redisTemplate.opsForZSet().rangeWithScores(KeyConstant.POST_KEY + id, 0, -1);

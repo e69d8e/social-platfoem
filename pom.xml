@@ -72,11 +72,23 @@
             <version>2.0.15</version>
         </dependency>
         <!--swagger-->
+        <!--这个swagger依赖会导致访问接口web页面时报错 要使用下面的-->
+        <!--        <dependency>-->
+        <!--            <groupId>com.github.xiaoymin</groupId>-->
+        <!--            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>-->
+        <!--            <version>4.6.0</version>-->
+        <!--        </dependency>-->
         <dependency>
-            <groupId>com.github.xiaoymin</groupId>
+            <groupId>com.github.xingfudeshi</groupId>
             <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-            <version>4.4.0</version>
+            <version>4.6.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.18.0</version> <!-- 使用已修复的安全版本 -->
+        </dependency>
+
         <!--jwt校验-->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -97,17 +109,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
-<!--        mybatis-plus 分页插件-->
+        <!--        mybatis-plus 分页插件-->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-jsqlparser</artifactId>
             <version>3.5.15</version>
         </dependency>
-<!--        hutool-->
+        <!--        hutool-->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
             <version>5.8.42</version>
+        </dependency>
+        <!--        elastic-search-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
         </dependency>
     </dependencies>
 

@@ -12,7 +12,6 @@ public class MessageConstant {
 
     // 异常
     public static final String EXCEPTION = "服务器异常";
-    public static final String MethodArgumentNotValidException_CODE = "1001";
     public static final String BizException_CODE = "1002";
     public static final String ID_IS_NULL = "ID为空";
     public static final String USER_IS_FOLLOWED = "用户已经关注了";
@@ -40,4 +39,10 @@ public class MessageConstant {
     public static final String NICKNAME_ERROR = "昵称不能为空或者长度不能超过16";
     public static final String BIO_ERROR = "简介长度不能超过50";
     public static final String ADD_COMMENT_SUCCESS = "评论成功";
+    public static final String LIKE_SUCCESS = "点赞/取消成功";
+    public static final String UPDATE_SUCCESS = "更新成功";
+    public static final String USER_NOT_LOGIN = "用户未登录";
+    public static final String USER_NOT_AUTHORIZED = "用户未授权";
+    public static final String USER_LOGIN_SUCCESS = "登录成功";
+    public static final String USER_LOGOUT_SUCCESS = "注销成功";
 }

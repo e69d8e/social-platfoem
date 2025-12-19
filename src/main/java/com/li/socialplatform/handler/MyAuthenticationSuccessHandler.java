@@ -1,6 +1,7 @@
 package com.li.socialplatform.handler;
 
 import com.alibaba.fastjson2.JSON;
+import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.pojo.entity.Result;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -20,7 +21,7 @@ public class MyAuthenticationSuccessHandler implements AuthenticationSuccessHand
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
         response.setContentType("application/json;charset=UTF-8");
-        Object json = JSON.toJSON(Result.ok("登录成功", ""));
+        Object json = JSON.toJSON(Result.ok(MessageConstant.USER_LOGIN_SUCCESS, ""));
         response.getWriter().write(json.toString());
     }
 }

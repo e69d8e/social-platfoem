@@ -20,16 +20,8 @@ spring:
           min-idle: 1 # 最小空闲连接数
           time-between-eviction-runs: 10s # 逐出连接的最小空闲时间
       database: 1
-# swagger
-springdoc:
-  # 分组文档
-  group-configs:
-    - group: system
-      paths-to-match:
-        - /system/**
-    - group: user
-      paths-to-match:
-        - /user/**
+  elasticsearch:
+    uris: http://127.0.0.1:9200
 server:
 #  servlet:
 #    context-path: /api
