@@ -220,6 +220,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         }
         // 首页帖子删除
         redisTemplate.opsForZSet().remove(KeyConstant.POST_LIST_KEY, id);
+        // 我的帖子删除
+        redisTemplate.opsForZSet().remove(KeyConstant.POST_KEY + userId, id);
         return Result.ok(MessageConstant.DELETE_SUCCESS, "");
     }
 

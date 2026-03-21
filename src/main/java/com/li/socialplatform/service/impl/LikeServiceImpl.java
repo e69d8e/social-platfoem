@@ -6,7 +6,10 @@ import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.mapper.LikeMapper;
+import com.li.socialplatform.mapper.PostMapper;
+import com.li.socialplatform.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.LikeRecord;
+import com.li.socialplatform.pojo.entity.Message;
 import com.li.socialplatform.pojo.entity.Post;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.service.ILikeService;
@@ -14,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,6 +33,9 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final UserMapper userMapper;
+    private final PostMapper postMapper;
 
     @Override
     public Result like(Long postId) {
@@ -60,6 +67,13 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
                     post.setCount(increment.intValue());
                     elasticsearchOperations.save(post);
                 }
+            }
+            // 通知
+            if (post != null) {
+                String username = userMapper.selectById(post.getUserId()).getUsername();
+                String title = postMapper.selectById(postId).getTitle();
+                Message message = new Message(postId, "有人点赞了你的帖子", title);
+                simpMessagingTemplate.convertAndSendToUser(username, "/queue/msg", message);
             }
         }
         return Result.ok(MessageConstant.LIKE_SUCCESS, "");

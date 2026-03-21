@@ -40,8 +40,10 @@ public class SecurityConfig {
                                                 "/upload/avatar", // 上传头像
                                                 "/upload/post", // 上传帖子图片
                                                 "/user/list/post", // 获取用户帖子列表
-                                                "/category" // 获取帖子分类
+                                                "/category", // 获取帖子分类
+                                                "/send" // 测试发送消息
                                         ).permitAll() // 放行
+                                        .requestMatchers("/ws/**").permitAll()
                                         .requestMatchers(HttpMethod.GET, "/post/{id}", "/post/list",
                                                 "/post/follow/list", "/post/user/{id}", "/comment/{id}",
                                                 "/user/list/post", "/user/list/user").permitAll()

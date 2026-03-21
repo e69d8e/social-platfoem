@@ -14,6 +14,7 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Date;
 import java.util.List;
@@ -34,6 +35,8 @@ class SocialPlatformApplicationTests {
     private UserMapper userMapper;
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+    @Autowired
+    private SimpMessagingTemplate simpMessagingTemplate;
     @Test
     void testAddPostElasticSearch() {
         try {
@@ -75,6 +78,11 @@ class SocialPlatformApplicationTests {
 //        hits.getSearchHits().forEach(hit -> {
 //            System.out.println(hit.getContent());
 //        });
+    }
+
+    @Test
+    void notifyMessage () {
+        simpMessagingTemplate.convertAndSendToUser("li", "/queue/msg", "点赞了你的帖子");
     }
 
 }
