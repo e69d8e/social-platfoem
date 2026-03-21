@@ -21,10 +21,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author e69d8e
@@ -53,7 +50,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             return Result.error(MessageConstant.USER_CANNOT_FOLLOW_SELF);
         }
         // 判断用户是否存在
-        if (userMapper.selectById(id) == null){
+        if (userMapper.selectById(id) == null) {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         Follow follow = followMapper.selectOne(new LambdaQueryWrapper<Follow>()
@@ -67,7 +64,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         // 缓存粉丝列表
         redisTemplate.opsForZSet().add(KeyConstant.FANS_LIST_KEY + id, userId, time);
         // 缓存关注列表
-        redisTemplate.opsForZSet().add(KeyConstant.FOLLOW_LIST + userId, id, time);
+        redisTemplate.opsForZSet().add(KeyConstant.Follow_LIST_KEY + userId, id, time);
         // 添加关注
         followMapper.insert(new Follow(null, userId, id, null));
         // 更新 ElasticSearch
@@ -119,7 +116,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         // 粉丝数减一
         Long increment = redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
         redisTemplate.opsForZSet().remove(KeyConstant.FANS_LIST_KEY + id, userId);
-        redisTemplate.opsForZSet().remove(KeyConstant.FOLLOW_LIST + userId, id);
+        redisTemplate.opsForZSet().remove(KeyConstant.Follow_LIST_KEY + userId, id);
         // 更新 ElasticSearch
         User user = elasticsearchOperations.get(id.toString(), User.class);
         if (user != null) {
@@ -156,10 +153,6 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
                 return Result.error(MessageConstant.USER_FANS_PRIVATE, List.of());
             }
         }
-        return getUserList(id, pageNum, pageSize);
-    }
-
-    private Result getUserList (Long id, Integer pageNum, Integer pageSize) {
         long start = (long) (pageNum - 1) * pageSize;
         long end = start + pageSize - 1;
         Long total = redisTemplate.opsForZSet().size(KeyConstant.FANS_LIST_KEY + id);
@@ -172,11 +165,12 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (end > total) {
             end = total - 1;
         }
-        Set<Object> range = redisTemplate.opsForZSet().range(KeyConstant.FANS_LIST_KEY + id, start, end);
-        if (range == null || range.isEmpty()) {
+        // 获取粉丝列表
+        Set<Object> follower = redisTemplate.opsForZSet().range(KeyConstant.FANS_LIST_KEY + id, start, end);
+        if (follower == null || follower.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
-        List<Long> ids = range.stream().map(member -> Long.valueOf(member.toString())).toList();
+        List<Long> ids = follower.stream().map(member -> Long.valueOf(member.toString())).toList();
         // 获取当前用户
         Long userId = userIdUtil.getUserId();
         List<User> users = userMapper.selectByIds(ids);
@@ -186,7 +180,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
             userVO.setCount(count == null ? 0 : count);
             if (userId != null) {
-                Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userId, user.getId());
+                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
                 userVO.setFollowed(score != null);
             } else {
                 userVO.setFollowed(false);
@@ -195,6 +189,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         }).toList();
         return Result.ok(userVOs, total);
     }
+
 
     @Override
     public Result getFolloweeList(Long id, Integer pageNum, Integer pageSize) {
@@ -209,7 +204,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         }
         long start = (long) (pageNum - 1) * pageSize;
         long end = start + pageSize - 1;
-        Long total = redisTemplate.opsForZSet().size(KeyConstant.FOLLOW_LIST + id);
+        Long total = redisTemplate.opsForZSet().size(KeyConstant.Follow_LIST_KEY + id);
         if (total == null) {
             return Result.ok(List.of(), 0L);
         }
@@ -220,11 +215,40 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             end = total - 1;
         }
         // 查询该用户关注列表
-        Set<Object> range = redisTemplate.opsForZSet().range(KeyConstant.FOLLOW_LIST + id, start, end);
-        if (range == null || range.isEmpty()) {
+        Set<Object> followee = redisTemplate.opsForZSet().range(KeyConstant.Follow_LIST_KEY + id, start, end);
+        if (followee == null || followee.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
-        List<Long> ids = range.stream().map(member -> Long.valueOf(member.toString())).toList();
+        List<Long> ids = followee.stream().map(member -> Long.valueOf(member.toString())).toList();
+        List<User> users = userMapper.selectByIds(ids);
+        List<UserVO> userVOs = new ArrayList<>();
+        for (User user : users) {
+            UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
+            userVO.setFollowed(true);
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
+            userVO.setCount(count == null ? 0 : count);
+            userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
+            userVOs.add(userVO);
+        }
+        return Result.ok(userVOs, total);
+    }
+
+    @Override
+    public Result getFriendList(Integer pageNum, Integer pageSize) {
+        // 查询我关注的人和关注我的人的交集
+        // 获取当前用户id
+        Long userId = userIdUtil.getUserId();
+        long start = (long) (pageNum - 1) * pageSize;
+        long end = start + pageSize - 1;
+        Long total = redisTemplate.opsForZSet().intersectAndStore(
+                KeyConstant.FANS_LIST_KEY + userId,
+                KeyConstant.Follow_LIST_KEY + userId,
+                KeyConstant.FRIEND_LIST_KEY + userId);
+        Set<Object> friend = redisTemplate.opsForZSet().range(KeyConstant.FRIEND_LIST_KEY + userId, start, end);
+        if (friend == null || friend.isEmpty()) {
+            return Result.ok(List.of(), 0L);
+        }
+        List<Long> ids = friend.stream().map(member -> Long.valueOf(member.toString())).toList();
         List<User> users = userMapper.selectByIds(ids);
         List<UserVO> userVOs = new ArrayList<>();
         for (User user : users) {

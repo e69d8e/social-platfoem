@@ -16,26 +16,31 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final IUserService userService;
+
     // 注册
     @PostMapping("/register")
     public Result register(@RequestBody UserDTO userDTO) {
         return userService.register(userDTO);
     }
+
     // 获取当前用户信息
     @GetMapping("/profile")
     public Result getUserProfile() {
         return userService.getUserProfile(null);
     }
+
     // 获取用户信息
     @GetMapping("/profile/{id}")
     public Result getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
     }
+
     // 修改用户信息
     @PutMapping("/profile")
     public Result updateUserProfile(@RequestBody UserDTO userDTO) {
         return userService.updateUserProfile(userDTO);
     }
+
     // 修改密码
     @PutMapping("/password")
     public Result updatePassword(@RequestBody UserDTO userDTO) {
@@ -60,7 +65,7 @@ public class UserController {
                            @RequestParam(defaultValue = "") Integer categoryId,
                            @RequestParam(defaultValue = "1") Integer pageNum,
                            @RequestParam(defaultValue = "8") Integer pageSize
-                           ) {
+    ) {
         return userService.listPost(keyword, categoryId, pageNum, pageSize);
     }
 
@@ -70,7 +75,7 @@ public class UserController {
                            @RequestParam(defaultValue = "") Integer gender,
                            @RequestParam(defaultValue = "1") Integer pageNum,
                            @RequestParam(defaultValue = "12") Integer pageSize
-                           ) {
+    ) {
         return userService.listUser(keyword, gender, pageNum, pageSize);
     }
 }

@@ -24,6 +24,7 @@ import java.util.Objects;
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements ICategoryService {
     private final CategoryMapper categoryMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+
     @Override
     public Result getCategory() {
         // 从缓存中取出

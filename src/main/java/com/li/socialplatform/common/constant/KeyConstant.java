@@ -11,10 +11,11 @@ public class KeyConstant {
     public static final String COMMENT_KEY = "comment:";
     public static final String LIKE_KEY = "like:";
     public static final String SIGN_IN_KEY = "sing-in:";
-    public static final String FOLLOW_LIST = "follow-list:";
+    public static final String Follow_LIST_KEY = "follow-list:";
     public static final String POST_KEY = "post:";
     public static final String LIKE_COUNT = "like-count:";
     public static final String CATEGORY_LIST_KEY = "category-list:";
     public static final String BAN_POST_KEY = "ban-post-list:";
     public static final String BAN_USER_KEY = "ban-use-list:";
+    public static final String FRIEND_LIST_KEY = "friend-list:";
 }

@@ -68,6 +68,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String result = encoder.encode(password);
         return "{bcrypt}" + result;
     }
+
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -106,7 +107,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
 
-
     @Override
     public Result getUserProfile(Long id) {
         User user;
@@ -128,7 +128,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             // 查询当前用户有没有关注
             Long userId = userIdUtil.getUserId();
             if (userId != null) {
-                Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userId, id);
+                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, id);
                 followed = score != null;
             }
         }
@@ -143,9 +143,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result updateUserProfile(UserDTO userDTO) {
-        User user = userMapper.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername())
-        );
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         if (userDTO.getGender() == null || userDTO.getGender() < 0 || userDTO.getGender() > 2) {
             return Result.error(MessageConstant.USER_INFO_ERROR);
         }
@@ -174,9 +172,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result updatePassword(UserDTO userDTO) {
-        User user = userMapper.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername())
-        );
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         user.setPassword(encodePassword(userDTO.getPassword()));
         userMapper.updateById(user);
         return Result.ok(MessageConstant.UPDATE_SUCCESS, "");
@@ -189,13 +185,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         // 获取今天是当月的第几天
         int day = now.getDayOfMonth();
         // 设置签到
-        redisTemplate.opsForValue()
-                .setBit(key, day - 1, true);
+        redisTemplate.opsForValue().setBit(key, day - 1, true);
         // 计算当月截至今天连续签到次数
-        List<Long> longs = redisTemplate.opsForValue().bitField(key,
-                BitFieldSubCommands.create()
-                        .get(BitFieldSubCommands.BitFieldType.unsigned(day))
-                        .valueAt(0) // 从第0位开始读取
+        List<Long> longs = redisTemplate.opsForValue().bitField(key, BitFieldSubCommands.create().get(BitFieldSubCommands.BitFieldType.unsigned(day)).valueAt(0) // 从第0位开始读取
         );
         // 0000000011
         Long tmp = null;
@@ -218,10 +210,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     public Result signInCount() {
         LocalDateTime now = LocalDateTime.now();
         String key = KeyConstant.SIGN_IN_KEY + getCurrentUsername() + now.format(DateTimeFormatter.ofPattern("yyyyMM"));
-        List<Long> longs = redisTemplate.opsForValue().bitField(key,
-                BitFieldSubCommands.create()
-                        .get(BitFieldSubCommands.BitFieldType.unsigned(now.getDayOfMonth()))
-                        .valueAt(0) // 从第0位开始读取
+        List<Long> longs = redisTemplate.opsForValue().bitField(key, BitFieldSubCommands.create().get(BitFieldSubCommands.BitFieldType.unsigned(now.getDayOfMonth())).valueAt(0) // 从第0位开始读取
         );
         Long tmp = null;
         if (longs != null) {
@@ -241,13 +230,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result listPost(String keyword, Integer categoryId, Integer pageNum, Integer pageSize) {
-        Criteria criteria = Criteria.where("title").contains(keyword)
-                .or("content").contains(keyword).and("enabled").is(true);
+        Criteria criteria = Criteria.where("title").contains(keyword).or("content").contains(keyword).and("enabled").is(true);
         if (categoryId != null) {
             criteria = criteria.and("categoryId").is(categoryId);
         }
-        Query query = new CriteriaQuery(criteria)
-                .addSort(Sort.by("count").descending())  // 排序
+        Query query = new CriteriaQuery(criteria).addSort(Sort.by("count").descending())  // 排序
                 .setPageable(PageRequest.of(pageNum - 1, pageSize));      // 分页
         SearchHits<Post> hits = elasticsearchOperations.search(query, Post.class);
         List<Post> posts = hits.stream().map(SearchHit::getContent).toList();
@@ -257,17 +244,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         List<PostVO> postVOS = new ArrayList<>();
         Long userId = userIdUtil.getUserId();
         for (Post post : posts) {
-            List<PostImage> postImages = postImageMapper.selectList(
-                    new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, post.getId()));
+            List<PostImage> postImages = postImageMapper.selectList(new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, post.getId()));
             PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
             postVO.setImgUrl(getImgUrl(postImages));
             postVO.setPostImages(postImagesToPostImagesVOs(postImages));
             if (userId == null) {
                 postVO.setLiked(false);
             } else {
-                postVO.setLiked(
-                        redisTemplate.opsForSet()
-                                .isMember(KeyConstant.LIKE_KEY + post.getId(), userId));
+                postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + post.getId(), userId));
             }
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
             postVO.setCount(count == null ? 0 : count);
@@ -314,13 +298,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result listUser(String keyword, Integer gender, Integer pageNum, Integer pageSize) {
-        Criteria criteria = Criteria.where("nickname").contains(keyword)
-                .or("username").contains(keyword);
+        Criteria criteria = Criteria.where("nickname").contains(keyword).or("username").contains(keyword);
         if (gender != null) {
             criteria = criteria.and("gender").is(gender);
         }
-        Query query = new CriteriaQuery(criteria)
-                .addSort(Sort.by("count").descending())  // 排序
+        Query query = new CriteriaQuery(criteria).addSort(Sort.by("count").descending())  // 排序
                 .setPageable(PageRequest.of(pageNum - 1, pageSize));      // 分页
         SearchHits<User> hits = elasticsearchOperations.search(query, User.class);
         List<User> users = hits.stream().map(SearchHit::getContent).toList();
@@ -331,7 +313,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         for (User user : users) {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
             userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), user.getId());
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userIdUtil.getUserId(), user.getId());
             userVO.setFollowed(score != null);
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
             userVO.setCount(count == null ? 0 : count);
@@ -358,7 +340,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 //        }
 //        return Result.ok(users, userIPage.getTotal());
     }
-
 
 
     private List<PostImageVO> postImagesToPostImagesVOs(List<PostImage> postImages) {

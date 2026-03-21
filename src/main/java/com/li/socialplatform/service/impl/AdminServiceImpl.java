@@ -5,8 +5,10 @@ import com.li.socialplatform.common.constant.AuthorityConstant;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.utils.UserIdUtil;
-import com.li.socialplatform.mapper.*;
-import com.li.socialplatform.pojo.entity.*;
+import com.li.socialplatform.mapper.AuthorityMapper;
+import com.li.socialplatform.mapper.UserMapper;
+import com.li.socialplatform.pojo.entity.Result;
+import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.service.IAdminService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class AdminServiceImpl implements IAdminService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final AuthorityMapper authorityMapper;
     private final UserIdUtil userIdUtil;
+
     @Override
     public Result banUser(Long id) {
         User user = userMapper.selectById(id);
@@ -70,7 +73,7 @@ public class AdminServiceImpl implements IAdminService {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
             userVO.setEnabled(false);
             userVO.setAuthority(authorityMapper.selectById(user.getAuthorityId()).getAuthority());
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userIdUtil.getUserId(), id);
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userIdUtil.getUserId(), id);
             userVO.setFollowed(score != null);
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
             userVO.setCount(count == null ? 0 : count);

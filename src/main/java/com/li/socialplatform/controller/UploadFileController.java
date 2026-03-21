@@ -72,12 +72,12 @@ public class UploadFileController {
         int d1 = hash & 0xF;
         int d2 = (hash >> 4) & 0xF;
         // 判断目录是否存在
-        File dir = new File(systemConstants.imageUploadDir, StrUtil.format("/{}/{}/{}",type, d1, d2));
+        File dir = new File(systemConstants.imageUploadDir, StrUtil.format("/{}/{}/{}", type, d1, d2));
         if (!dir.exists()) {
             boolean mkdir = dir.mkdirs();
             log.info("创建目录：{}", mkdir);
         }
         // 生成文件名
-        return  StrUtil.format("/{}/{}/{}/{}.{}", type, d1, d2, name, suffix);
+        return StrUtil.format("/{}/{}/{}/{}.{}", type, d1, d2, name, suffix);
     }
 }

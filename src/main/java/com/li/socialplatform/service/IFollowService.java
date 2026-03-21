@@ -12,4 +12,6 @@ public interface IFollowService extends IService<Follow> {
     Result getFollowerList(Long id, Integer pageNum, Integer pageSize);
 
     Result getFolloweeList(Long id, Integer pageNum, Integer pageSize);
+
+    Result getFriendList(Integer pageNum, Integer pageSize);
 }

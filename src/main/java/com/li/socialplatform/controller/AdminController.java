@@ -24,10 +24,7 @@ public class AdminController {
 
     // 获取封禁用户
     @GetMapping("/ban")
-    public Result getBanUser(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "8") Integer pageSize
-    ) {
+    public Result getBanUser(@RequestParam(defaultValue = "1") Integer pageNum, @RequestParam(defaultValue = "8") Integer pageSize) {
         return adminService.getBanUser(pageNum, pageSize);
     }
 

@@ -10,7 +10,10 @@ import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.common.utils.UserIdUtil;
-import com.li.socialplatform.mapper.*;
+import com.li.socialplatform.mapper.CategoryMapper;
+import com.li.socialplatform.mapper.PostImageMapper;
+import com.li.socialplatform.mapper.PostMapper;
+import com.li.socialplatform.mapper.UserMapper;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
 import com.li.socialplatform.pojo.vo.PostDetailVO;
@@ -26,7 +29,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 /**
  * @author e69d8e
@@ -50,6 +55,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth.getName();
     }
+
     private final UserMapper userMapper;
 
     @Override
@@ -139,7 +145,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         if (userId == null) {
             postDetailVO.setFollowed(false);
         } else {
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.FOLLOW_LIST + userId, user.getId());
+            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
             postDetailVO.setFollowed(score != null);
         }
         return Result.ok(postDetailVO);
@@ -149,7 +155,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     public Result listPosts(Long lastId, Integer offset) {
         Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                 .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
-                0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
+                        0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
         // 获取当前用户
         Long userId = userIdUtil.getUserId();
         if (userId == null) {

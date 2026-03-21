@@ -17,16 +17,19 @@ import org.springframework.web.bind.annotation.*;
 public class FollowController {
 
     private final IFollowService followService;
+
     // 关注用户
     @PostMapping("/{id}")
     public Result follow(@PathVariable Long id) {
         return followService.follow(id);
     }
+
     // 取消关注
     @DeleteMapping("/{id}")
     public Result cancelFollow(@PathVariable Long id) {
         return followService.cancelFollow(id);
     }
+
     // 获取某个用户粉丝列表
     @GetMapping("/list/{id}")
     public Result getFollowerList(@PathVariable Long id,
@@ -34,6 +37,7 @@ public class FollowController {
                                   @RequestParam(defaultValue = "10") Integer pageSize) {
         return followService.getFollowerList(id, pageNum, pageSize);
     }
+
     // 获取某个用户关注列表
     @GetMapping("/list/followee/{id}")
     public Result getFolloweeList(@PathVariable Long id,
@@ -41,15 +45,25 @@ public class FollowController {
                                   @RequestParam(defaultValue = "10") Integer pageSize) {
         return followService.getFolloweeList(id, pageNum, pageSize);
     }
+
     // 获取当前用户的粉丝列表
     @GetMapping("/list")
     public Result getFollowerList(@RequestParam(defaultValue = "1") Integer pageNum,
                                   @RequestParam(defaultValue = "10") Integer pageSize) {
         return followService.getFollowerList(null, pageNum, pageSize);
     }
+
+    // 获取当前用户的关注列表
     @GetMapping("/followee")
     public Result getFolloweeList(@RequestParam(defaultValue = "1") Integer pageNum,
                                   @RequestParam(defaultValue = "10") Integer pageSize) {
         return followService.getFolloweeList(null, pageNum, pageSize);
+    }
+
+    // 获取当前用户的好友列表
+    @GetMapping("/friend")
+    public Result getFriendList(@RequestParam(defaultValue = "1") Integer pageNum,
+                                @RequestParam(defaultValue = "10") Integer pageSize) {
+        return followService.getFriendList(pageNum, pageSize);
     }
 }
