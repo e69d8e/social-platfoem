@@ -18,7 +18,7 @@ public interface IUserService extends IService<User> {
 
     Result signInCount();
 
-    Result listPost(String keyword, Integer categoryId, Integer pageNum, Integer pageSize);
+    Result listPost(String keyword, Integer pageNum, Integer pageSize);
 
-    Result listUser(String keyword, Integer gender, Integer pageNum, Integer pageSize);
+    Result listUser(String keyword, Integer pageNum, Integer pageSize);
 }

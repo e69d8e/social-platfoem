@@ -48,7 +48,12 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     public Result addComment(CommentDTO commentDTO) {
         log.info(commentDTO.toString());
         Comment comment = BeanUtil.copyProperties(commentDTO, Comment.class);
-        comment.setUserId(userIdUtil.getUserId());
+        Long userId = userIdUtil.getUserId();
+        User user = userMapper.selectById(userId);
+        if (!user.getEnabled()) {
+            return Result.error(MessageConstant.USER_NOT_ENABLED);
+        }
+        comment.setUserId(userId);
         long timeMillis = System.currentTimeMillis();
 //        LocalDateTime now = LocalDateTime.now();
 //        comment.setCreateTime(now);

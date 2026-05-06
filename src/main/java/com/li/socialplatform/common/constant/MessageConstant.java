@@ -45,4 +45,5 @@ public class MessageConstant {
     public static final String USER_NOT_AUTHORIZED = "用户未授权";
     public static final String USER_LOGIN_SUCCESS = "登录成功";
     public static final String USER_LOGOUT_SUCCESS = "注销成功";
+    public static final String USER_NOT_ENABLED = "用户被封禁";
 }

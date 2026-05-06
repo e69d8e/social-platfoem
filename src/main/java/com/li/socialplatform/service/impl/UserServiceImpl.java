@@ -7,6 +7,8 @@ import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.repository.PostElasticsearchRepository;
+import com.li.socialplatform.repository.UserElasticsearchRepository;
 import com.li.socialplatform.mapper.UserMapper;
 import com.li.socialplatform.pojo.dto.UserDTO;
 import com.li.socialplatform.pojo.entity.Post;
@@ -18,13 +20,8 @@ import com.li.socialplatform.service.IUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.Criteria;
-import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
-import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
@@ -53,7 +50,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final SystemConstants systemConstants;
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
-    private final ElasticsearchOperations elasticsearchOperations;
+    private final UserElasticsearchRepository userElasticsearchRepository;
+    private final PostElasticsearchRepository postElasticsearchRepository;
 
     // 密码加密
     private String encodePassword(String password) {
@@ -96,7 +94,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         userMapper.insert(user);
         // 将用户信息存入 Elasticsearch
         user.setCount(0);
-        elasticsearchOperations.save(user);
+        userElasticsearchRepository.save(user);
         return Result.ok(MessageConstant.REGISTER_SUCCESS, "");
     }
 
@@ -160,6 +158,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         user.setFansPrivate(userDTO.getFansPrivate() == null ? user.getFansPrivate() : userDTO.getFansPrivate());
         user.setFollowPrivate(userDTO.getFollowPrivate() == null ? user.getFollowPrivate() : userDTO.getFollowPrivate());
         userMapper.updateById(user);
+        // 更新 Elasticsearch
+        userElasticsearchRepository.save(user);
         return Result.ok(MessageConstant.UPDATE_SUCCESS, "");
     }
 
@@ -222,15 +222,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result listPost(String keyword, Integer categoryId, Integer pageNum, Integer pageSize) {
-        Criteria criteria = Criteria.where("title").contains(keyword).or("content").contains(keyword).and("enabled").is(true);
-        if (categoryId != null) {
-            criteria = criteria.and("categoryId").is(categoryId);
-        }
-        Query query = new CriteriaQuery(criteria).addSort(Sort.by("count").descending())  // 排序
-                .setPageable(PageRequest.of(pageNum - 1, pageSize));      // 分页
-        SearchHits<Post> hits = elasticsearchOperations.search(query, Post.class);
-        List<Post> posts = hits.stream().map(SearchHit::getContent).toList();
+    public Result listPost(String keyword, Integer pageNum, Integer pageSize) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "count");
+        Pageable pageable = PageRequest.of(pageNum - 1, pageSize, sort);
+        List<Post> posts = postElasticsearchRepository.findByTitleOrContent(keyword, keyword, pageable);
+        Long total = postElasticsearchRepository.count();
         if (posts.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -247,7 +243,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             postVO.setCount(count == null ? 0 : count);
             postVOS.add(postVO);
         }
-        return Result.ok(postVOS, hits.getTotalHits());
+        return Result.ok(postVOS, total);
 //        IPage<Post> page = new Page<>(pageNum, pageSize);
 //        LambdaQueryWrapper<Post> search = new LambdaQueryWrapper<Post>()
 //                .and(wrapper -> wrapper
@@ -287,15 +283,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result listUser(String keyword, Integer gender, Integer pageNum, Integer pageSize) {
-        Criteria criteria = Criteria.where("nickname").contains(keyword).or("username").contains(keyword);
-        if (gender != null) {
-            criteria = criteria.and("gender").is(gender);
-        }
-        Query query = new CriteriaQuery(criteria).addSort(Sort.by("count").descending())  // 排序
-                .setPageable(PageRequest.of(pageNum - 1, pageSize));      // 分页
-        SearchHits<User> hits = elasticsearchOperations.search(query, User.class);
-        List<User> users = hits.stream().map(SearchHit::getContent).toList();
+    public Result listUser(String keyword, Integer pageNum, Integer pageSize) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "count");
+        Pageable pageable = PageRequest.of(pageNum - 1, pageSize, sort);
+        List<User> users = userElasticsearchRepository.findByUsernameOrNickname(keyword, keyword, pageable);
+        long total = userElasticsearchRepository.count();
         if (users.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -308,7 +300,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             userVO.setCount(count == null ? 0 : count);
             userVOS.add(userVO);
         }
-        return Result.ok(userVOS, hits.getTotalHits());
+        return Result.ok(userVOS, total);
 //        IPage<User> page = new Page<>(pageNum, pageSize);
 //        LambdaQueryWrapper<User> search = new LambdaQueryWrapper<User>()
 //                .like(User::getNickname, nickname);

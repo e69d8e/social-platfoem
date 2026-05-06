@@ -9,19 +9,17 @@ import com.li.socialplatform.common.constant.AuthorityConstant;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.HtmlUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
-import com.li.socialplatform.mapper.CategoryMapper;
-import com.li.socialplatform.mapper.PostImageMapper;
-import com.li.socialplatform.mapper.PostMapper;
-import com.li.socialplatform.mapper.UserMapper;
+import com.li.socialplatform.mapper.*;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
 import com.li.socialplatform.pojo.vo.PostDetailVO;
 import com.li.socialplatform.pojo.vo.PostVO;
+import com.li.socialplatform.repository.PostElasticsearchRepository;
 import com.li.socialplatform.service.IPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.Authentication;
@@ -47,7 +45,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final RedisTemplate<String, Object> redisTemplate;
     private final SystemConstants systemConstants;
     private final UserIdUtil userIdUtil;
-    private final ElasticsearchOperations elasticsearchOperations;
+    private final PostElasticsearchRepository postElasticsearchRepository;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -61,6 +59,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     public Result publishPost(PostDTO postDTO) {
         // 获取当前登录用户id
         Long id = userIdUtil.getUserId();
+        User user = userMapper.selectById(id);
+        if (!user.getEnabled()) {
+            return Result.error(MessageConstant.USER_NOT_ENABLED);
+        }
         if (postDTO.getContent() == null || postDTO.getContent().isEmpty()) {
             return Result.error(MessageConstant.CONTENT_IS_NULL);
         }
@@ -96,10 +98,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<Long> fanIds = getFanIds(id);
         // 将帖子添加到粉丝缓存
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
-        // 添加帖子存到ES中
         post.setCount(0);
         post.setEnabled(true);
-        elasticsearchOperations.save(post);
+        // 转换为纯文本
+        String text = HtmlUtils.htmlToPlainText(post.getContent());
+        post.setContent(text);
+        // 添加到ES中
+        postElasticsearchRepository.save(post);
         return Result.ok(MessageConstant.PUBLISH_SUCCESS, "");
     }
 

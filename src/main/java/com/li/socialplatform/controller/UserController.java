@@ -62,20 +62,18 @@ public class UserController {
     // 用户搜索帖子
     @GetMapping("/list/post")
     public Result listPost(@RequestParam(defaultValue = "") String keyword,
-                           @RequestParam(defaultValue = "") Integer categoryId,
                            @RequestParam(defaultValue = "1") Integer pageNum,
                            @RequestParam(defaultValue = "8") Integer pageSize
     ) {
-        return userService.listPost(keyword, categoryId, pageNum, pageSize);
+        return userService.listPost(keyword, pageNum, pageSize);
     }
 
     // 用户搜索用户
     @GetMapping("/list/user")
     public Result listUser(@RequestParam(defaultValue = "") String keyword,
-                           @RequestParam(defaultValue = "") Integer gender,
                            @RequestParam(defaultValue = "1") Integer pageNum,
                            @RequestParam(defaultValue = "12") Integer pageSize
     ) {
-        return userService.listUser(keyword, gender, pageNum, pageSize);
+        return userService.listUser(keyword, pageNum, pageSize);
     }
 }

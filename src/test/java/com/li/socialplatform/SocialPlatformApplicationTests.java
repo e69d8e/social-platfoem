@@ -1,9 +1,11 @@
 package com.li.socialplatform;
 
 import com.li.socialplatform.common.constant.KeyConstant;
+import com.li.socialplatform.common.utils.HtmlUtils;
 import com.li.socialplatform.mapper.PostMapper;
 import com.li.socialplatform.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.Post;
+import com.li.socialplatform.pojo.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,9 +42,10 @@ class SocialPlatformApplicationTests {
     @Test
     void testAddPostElasticSearch() {
         try {
-            // 将数据库中的数据导入ElasticSearch
+            // 将数据库中的post数据导入ElasticSearch
             postMapper.selectList(null).forEach(post -> {
                 Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
+                post.setContent(HtmlUtils.htmlToPlainText(post.getContent()));
                 post.setCount(count == null ? 0 : count);
                 elasticsearchOperations.save(post);
             });
@@ -54,7 +57,7 @@ class SocialPlatformApplicationTests {
     @Test
     void testAddUserElasticSearch() {
         try {
-            // 将数据库中的数据导入ElasticSearch
+            // 将数据库中的user数据导入ElasticSearch
             userMapper.selectList(null).forEach(user -> {
                 Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
                 user.setCount(count == null ? 0 : count);
@@ -91,5 +94,9 @@ class SocialPlatformApplicationTests {
         elasticsearchOperations.indexOps(Post.class).delete();
         elasticsearchOperations.indexOps(Post.class).create();
         elasticsearchOperations.indexOps(Post.class).putMapping();
+
+        elasticsearchOperations.indexOps(User.class).delete();
+        elasticsearchOperations.indexOps(User.class).create();
+        elasticsearchOperations.indexOps(User.class).putMapping();
     }
 }
