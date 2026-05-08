@@ -2,8 +2,8 @@ package com.li.socialplatform;
 
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.utils.HtmlUtils;
-import com.li.socialplatform.mapper.PostMapper;
-import com.li.socialplatform.mapper.UserMapper;
+import com.li.socialplatform.server.mapper.PostMapper;
+import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.Post;
 import com.li.socialplatform.pojo.entity.User;
 import org.junit.jupiter.api.Test;

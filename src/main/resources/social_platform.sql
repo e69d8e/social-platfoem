@@ -139,6 +139,17 @@ CREATE TABLE if not exists `like_record` (
                                              KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点赞记录表';
 
+DROP TABLE IF EXISTS `session`;
+
+CREATE TABLE IF NOT EXISTS `session` (
+                                         `id` VARCHAR(255) COMMENT '会话id',
+                                         `name` VARCHAR(255) NOT NULL,
+                                         `user_id` BIGINT NOT NULL COMMENT '用户id',
+                                         `time` DATETIME DEFAULT NOW() COMMENT '会话时间',
+                                         PRIMARY KEY (`id`),
+                                         INDEX idx_user_id (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
+
 # drop table if exists `notification`;
 # # 通知表
 # CREATE TABLE `notification` (

@@ -1,8 +1,8 @@
 package com.li.socialplatform.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.li.socialplatform.mapper.AuthorityMapper;
-import com.li.socialplatform.mapper.UserMapper;
+import com.li.socialplatform.server.mapper.AuthorityMapper;
+import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.Authority;
 import com.li.socialplatform.pojo.entity.User;
 import lombok.RequiredArgsConstructor;
