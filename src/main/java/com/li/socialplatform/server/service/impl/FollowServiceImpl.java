@@ -190,7 +190,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
 
     @Override
     public Result getFolloweeList(Long id, Integer pageNum, Integer pageSize) {
-        if (id == null) {
+        boolean isSelf = id == null;
+        if (isSelf) {
             id = userIdUtil.getUserId();
         } else {
             // 查询该用户关注列表是否为私密
@@ -221,7 +222,14 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         List<UserVO> userVOs = new ArrayList<>();
         for (User user : users) {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
-            userVO.setFollowed(true);
+            if (isSelf) {
+                userVO.setFollowed(true);
+            } else {
+                // 查询该用户是否是当前用户的关注者
+                Long userId = userIdUtil.getUserId();
+                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
+                userVO.setFollowed(score != null);
+            }
             Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
             userVO.setCount(count == null ? 0 : count);
             userVOs.add(userVO);

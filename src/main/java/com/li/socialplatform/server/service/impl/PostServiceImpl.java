@@ -17,7 +17,6 @@ import com.li.socialplatform.pojo.vo.PostDetailVO;
 import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.server.repository.PostElasticsearchRepository;
 import com.li.socialplatform.server.mapper.CategoryMapper;
-import com.li.socialplatform.server.mapper.PostImageMapper;
 import com.li.socialplatform.server.mapper.PostMapper;
 import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.server.service.IPostService;
@@ -43,7 +42,6 @@ import java.util.Set;
 public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IPostService {
 
     private final PostMapper postMapper;
-    private final PostImageMapper postImageMapper;
     private final CategoryMapper categoryMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final SystemConstants systemConstants;
@@ -104,7 +102,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         post.setCount(0);
         post.setEnabled(true);
         // 转换为纯文本
-        String text = HtmlUtils.htmlToPlainText(post.getContent());
+        String text = HtmlUtils.htmlToPlainText(postDTO.getContent());
         post.setContent(text);
         // 添加到ES中
         postElasticsearchRepository.save(post);
@@ -208,8 +206,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         }
         // 删除帖子
         postMapper.deleteById(id);
-        // 删除帖子图片
-        postImageMapper.delete(new LambdaQueryWrapper<PostImage>().eq(PostImage::getPostId, id));
         List<Long> fanIds = getFanIds(userId);
         // 将他的粉丝的缓存中的数据清除
         for (Long fanId : fanIds) {

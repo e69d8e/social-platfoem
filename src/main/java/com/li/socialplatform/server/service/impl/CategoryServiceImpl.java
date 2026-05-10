@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author e69d8e
@@ -34,10 +35,11 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
             return Result.ok(Objects.requireNonNull(redisTemplate.opsForList().range(key, 0, -1))
                     .stream().map(item -> BeanUtil.copyProperties(item, Category.class)).toList());
         }
-        // 如果缓存没有 则从数据库查 返回并加入缓存
+        // 如果缓存没有 则从数据库查 返回并加入缓存 并设置缓存过期时间
         List<Category> categories = categoryMapper.selectList(new LambdaQueryWrapper<>());
         for (Category category : categories) {
             redisTemplate.opsForList().rightPush(KeyConstant.CATEGORY_LIST_KEY, category);
+            redisTemplate.expire(KeyConstant.CATEGORY_LIST_KEY, 10, TimeUnit.MINUTES);
         }
         return Result.ok(categories);
     }

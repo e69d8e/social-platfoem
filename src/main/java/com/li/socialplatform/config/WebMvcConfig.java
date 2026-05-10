@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecutor;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -22,17 +23,29 @@ Please, configure an AsyncTaskExecutor through the WebMvc config.
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
+//    @Bean(name = "mvcTaskExecutor")
+//    public AsyncTaskExecutor mvcTaskExecutor() {
+//        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+//        executor.setCorePoolSize(10); // 核心线程数
+//        executor.setMaxPoolSize(50); // 最大线程数
+//        executor.setQueueCapacity(100); // 队列容量
+//        executor.setThreadNamePrefix("mvc-async-"); // 线程前缀名
+//        executor.setKeepAliveSeconds(60); // 线程空闲时间
+//        executor.setAllowCoreThreadTimeOut(true);
+//        executor.initialize();
+//        return executor;
+//    }
     @Bean(name = "mvcTaskExecutor")
     public AsyncTaskExecutor mvcTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(10); // 核心线程数
-        executor.setMaxPoolSize(50); // 最大线程数
-        executor.setQueueCapacity(100); // 队列容量
-        executor.setThreadNamePrefix("mvc-async-"); // 线程前缀名
-        executor.setKeepAliveSeconds(60); // 线程空闲时间
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(50);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("mvc-async-");
+        executor.setKeepAliveSeconds(60);
         executor.setAllowCoreThreadTimeOut(true);
         executor.initialize();
-        return executor;
+        return new DelegatingSecurityContextAsyncTaskExecutor(executor);
     }
     @Override
     public void configureAsyncSupport(AsyncSupportConfigurer configurer) {

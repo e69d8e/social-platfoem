@@ -1,8 +1,6 @@
 package com.li.socialplatform.server.controller;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,18 +36,5 @@ public class TestController {
     public String test2() {
 //        throw new RuntimeException("hhh");
         return "test2";
-    }
-
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
-
-    @GetMapping("/send")
-    public String send() {
-        messagingTemplate.convertAndSendToUser(
-                "li",
-                "/queue/msg",
-                "点赞了你的帖子"
-        );
-        return "ok";
     }
 }

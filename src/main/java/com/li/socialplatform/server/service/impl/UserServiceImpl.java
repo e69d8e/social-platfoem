@@ -6,7 +6,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.JwtUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.pojo.dto.LoginDTO;
+import com.li.socialplatform.pojo.dto.RefreshDTO;
+import com.li.socialplatform.pojo.vo.TokenVO;
 import com.li.socialplatform.server.repository.PostElasticsearchRepository;
 import com.li.socialplatform.server.repository.UserElasticsearchRepository;
 import com.li.socialplatform.server.mapper.UserMapper;
@@ -17,16 +21,25 @@ import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.server.service.IUserService;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.micrometer.common.util.StringUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -36,6 +49,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author e69d8e
@@ -52,6 +66,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final UserIdUtil userIdUtil;
     private final UserElasticsearchRepository userElasticsearchRepository;
     private final PostElasticsearchRepository postElasticsearchRepository;
+    private final JwtUtils jwtUtils;
+    private final AuthenticationManager authenticationManager;
+
+    @Value("${jwt.access-expire}")
+    private Long accessExpire;
+
+    @Value("${jwt.refresh-expire}")
+    private Long refreshExpire;
 
     // 密码加密
     private String encodePassword(String password) {
@@ -65,6 +87,64 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private String getCurrentUsername() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth.getName();
+    }
+
+    @Override
+    public Result login(LoginDTO loginDTO) {
+        // 1. 创建未认证的 UsernamePasswordAuthenticationToken
+        UsernamePasswordAuthenticationToken authToken =
+                new UsernamePasswordAuthenticationToken(loginDTO.getUsername(), loginDTO.getPassword());
+
+        // 2. 调用 AuthenticationManager 进行认证（会触发 UserDetailsService 和 PasswordEncoder）
+        Authentication authentication = authenticationManager.authenticate(authToken);
+
+        // 3. 认证成功后，从 Authentication 对象中获取用户信息
+        //    getPrincipal() 返回的是 UserDetails 对象（即之前自定义的 SecurityUser 实例）
+        UserDetails authenticatedUser = (UserDetails) authentication.getPrincipal();
+        String username = authenticatedUser.getUsername();
+
+        // 4. 生成 token 并存储 refreshToken 到 Redis
+        String accessToken = jwtUtils.generateToken(username, accessExpire);
+        String refreshToken = jwtUtils.generateToken(username, refreshExpire);
+        redisTemplate.opsForValue().set(KeyConstant.REFRESH_KEY + username, refreshToken, refreshExpire, TimeUnit.MILLISECONDS);
+
+        return Result.ok(MessageConstant.USER_LOGIN_SUCCESS, new TokenVO(accessToken, refreshToken));
+    }
+
+    @Override
+    public Result refresh(RefreshDTO refreshDTO) {
+        String refreshToken = refreshDTO.getRefreshToken();
+        if (StringUtils.isEmpty(refreshToken)) {
+            throw new RuntimeException("refresh token is empty");
+        }
+        // 1. 解析 refreshToken 获取用户名
+        Claims claims;
+        try {
+            claims = jwtUtils.parseToken(refreshToken);
+        } catch (ExpiredJwtException e) {
+            throw new RuntimeException("refresh token 过期，请重新登录");
+        } catch (JwtException e) {
+            throw new RuntimeException("无效的 refresh token");
+        }
+        String username = claims.getSubject();
+        // 2. 从 Redis 中获取保存的 refreshToken 并比对
+        String storedRefreshToken = (String) redisTemplate.opsForValue().get(KeyConstant.REFRESH_KEY + username);
+        if (!refreshToken.equals(storedRefreshToken)) {
+            throw new RuntimeException("refresh token 不匹配");
+        }
+        // 3. 生成新的 accessToken（也可同时刷新 refreshToken，可选）
+        String newAccessToken = jwtUtils.generateToken(username, accessExpire);
+        // 可选：如果希望 refreshToken 也续期，可以重新生成并更新 Redis
+         String newRefreshToken = jwtUtils.generateToken(username, refreshExpire);
+         redisTemplate.opsForValue().set(KeyConstant.REFRESH_KEY + username, newRefreshToken, refreshExpire, TimeUnit.MILLISECONDS);
+        return Result.ok(new TokenVO(newAccessToken, newRefreshToken)); // refreshToken 可不变或返回新值
+    }
+
+    @Override
+    public Result logout(HttpServletRequest request) {
+        String username = getCurrentUsername();
+        redisTemplate.delete(KeyConstant.REFRESH_KEY + username);
+        return Result.ok();
     }
 
     @Override
@@ -222,11 +302,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result listPost(String keyword, Integer pageNum, Integer pageSize) {
+    public Result listPost(String keyword, Integer pageNum, Integer pageSize, Integer categoryId) {
         Sort sort = Sort.by(Sort.Direction.DESC, "count");
         Pageable pageable = PageRequest.of(pageNum - 1, pageSize, sort);
-        List<Post> posts = postElasticsearchRepository.findByTitleOrContent(keyword, keyword, pageable);
-        Long total = postElasticsearchRepository.count();
+        List<Post> posts;
+        Long total;
+        if (StringUtils.isEmpty(keyword)) {
+            if (categoryId == null) {
+                posts = postElasticsearchRepository.findAll(pageable).getContent();
+                total = postElasticsearchRepository.count();
+            } else {
+                posts = postElasticsearchRepository.findByCategoryId(categoryId, pageable);
+                total = postElasticsearchRepository.countByCategoryId(categoryId);
+            }
+        } else {
+            if (categoryId == null) {
+                posts = postElasticsearchRepository.findByTitleOrContent(keyword, keyword, pageable);
+                total = postElasticsearchRepository.countByTitleOrContent(keyword, keyword);
+            } else {
+                posts = postElasticsearchRepository.findByTitleOrContentAndCategoryId(keyword, keyword, categoryId, pageable);
+                total = postElasticsearchRepository.countByTitleOrContentAndCategoryId(keyword, keyword, categoryId);
+            }
+        }
         if (posts.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }

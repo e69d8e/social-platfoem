@@ -8,7 +8,6 @@ import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.server.mapper.CommentMapper;
-import com.li.socialplatform.server.mapper.PostMapper;
 import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.dto.CommentDTO;
 import com.li.socialplatform.pojo.entity.*;
@@ -20,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -41,8 +39,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     private final CommentMapper commentMapper;
     private final UserMapper userMapper;
     private final UserIdUtil userIdUtil;
-    private final SimpMessagingTemplate simpMessagingTemplate;
-    private final PostMapper postMapper;
 
     @Override
     public Result addComment(CommentDTO commentDTO) {
@@ -66,11 +62,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             redisTemplate.opsForZSet()
                     .add(KeyConstant.COMMENT_KEY + commentDTO.getPostId(),
                             comment.getId(), timeMillis);
-        } else {
-            String username = userMapper.selectById(comment.getReplyTo()).getUsername();
-            Post post = postMapper.selectById(comment.getPostId());
-            Message message = new Message(comment.getPostId(), "有人回复了你", post.getTitle());
-            simpMessagingTemplate.convertAndSendToUser(username, "/queue/msg", message);
         }
         return Result.ok(MessageConstant.ADD_COMMENT_SUCCESS, "");
     }

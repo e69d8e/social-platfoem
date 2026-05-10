@@ -1,19 +1,27 @@
 package com.li.socialplatform.config;
 
+import com.li.socialplatform.filter.JwtAuthenticationFilter;
 import com.li.socialplatform.handler.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity // 开启方法权限控制
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         //authorizeRequests()：开启授权保护
@@ -29,6 +37,8 @@ public class SecurityConfig {
                                                 "/swagger-resources/**",
                                                 "/doc.html",
                                                 "/webjars/**",
+                                                "/user/login", // 登录接口
+                                                "/user/refresh", // 刷新token接口
                                                 "/user/register", // 注册接口
                                                 "/test2", // 测试接口
                                                 "/user/profile/*", // 查询其他用户信息接口
@@ -41,9 +51,9 @@ public class SecurityConfig {
                                                 "/upload/post", // 上传帖子图片
                                                 "/user/list/post", // 获取用户帖子列表
                                                 "/category", // 获取帖子分类
-                                                "/send" // 测试发送消息
+                                                "/send", // 测试发送消息
+                                                "/chat"
                                         ).permitAll() // 放行
-                                        .requestMatchers("/ws/**").permitAll()
                                         .requestMatchers(HttpMethod.GET, "/post/{id}", "/post/list",
                                                 "/post/follow/list", "/post/user/{id}", "/comment/{id}",
                                                 "/user/list/post", "/user/list/user").permitAll()
@@ -57,18 +67,19 @@ public class SecurityConfig {
                                         .anyRequest() // 所有请求
                                         .authenticated() // 需要认证
                 )
-                .formLogin(
-                        login -> login
-                                .loginProcessingUrl("/user/login").permitAll() // 前端登录接口
-                                .successHandler(new MyAuthenticationSuccessHandler()) // 登录成功处理
-                                .failureHandler(new MyAuthenticationFailHandler()) // 登录失败处理
-                )// 自定义登录页面 .permitAll() 表示登录页面可以任意访问
+//                .formLogin(
+//                        login -> login
+//                                .loginProcessingUrl("/user/login").permitAll() // 前端登录接口
+//                                .successHandler(new MyAuthenticationSuccessHandler()) // 登录成功处理
+//                                .failureHandler(new MyAuthenticationFailHandler()) // 登录失败处理
+//                )// 自定义登录页面 .permitAll() 表示登录页面可以任意访问
+//        ;
+//        // 注销
+//        http.logout(logout -> logout
+//                .logoutSuccessHandler(new MyLogoutHandler()) // 注销成功处理
+//                .logoutUrl("/user/logout") // 注销接口 post 请求
+//        );
         ;
-        // 注销
-        http.logout(logout -> logout
-                .logoutSuccessHandler(new MyLogoutHandler()) // 注销成功处理
-                .logoutUrl("/user/logout") // 注销接口 post 请求
-        );
         // 错误信息
         http.exceptionHandling(
                 exception -> {
@@ -89,10 +100,14 @@ public class SecurityConfig {
             source.registerCorsConfiguration("/**", config);
             cors.configurationSource(source);
         });
-
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class); // 添加 JWT 认证过滤器
         // 关闭csrf攻击防御
         http.csrf(AbstractHttpConfigurer::disable);
         return http.build();
+    }
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
     }
 
 }

@@ -1,6 +1,5 @@
 package com.li.socialplatform.handler;
 
-import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.exception.BizException;
 import com.li.socialplatform.pojo.entity.Result;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +28,6 @@ public class GlobalExceptionHandler  {
         log.error("服务器异常：{}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.error(MessageConstant.EXCEPTION));
+                .body(Result.error(e.getMessage()));
     }
 }

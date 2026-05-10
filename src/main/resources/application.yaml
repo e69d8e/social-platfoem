@@ -60,3 +60,9 @@ social-platform:
     content-max-length: 12000
     nickname-max-length: 16
     bio-max-length: 2000
+
+jwt:
+  secret: ${PASSWORD}
+  access-expire: 86400000 # 毫秒值 1天
+#  access-expire: 10000 # 毫秒
+  refresh-expire: 604800000 # 7天
