@@ -17,6 +17,7 @@ CREATE TABLE if not exists `user` (
                                       `enabled` TINYINT(1) DEFAULT 1 COMMENT '是否启用', # 默认启用
                                       `fans_private` TINYINT(1) DEFAULT 0 COMMENT '是否允许他人查看粉丝列表 (0: 允许, 1: 不允许)',
                                       `follow_private` TINYINT(1) DEFAULT 0 COMMENT '是否允许他人查看关注列表 (0: 允许, 1: 不允许)',
+    `fans_count` INT DEFAULT 0 COMMENT '粉丝数',
                                       PRIMARY KEY (`id`),
                                       KEY `idx_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
@@ -90,6 +91,8 @@ CREATE TABLE if not exists `post` (
                                       `category_id` Int default 1 COMMENT '分类ID',
                                       `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
                                       `enabled` TINYINT(1) DEFAULT 1 COMMENT '是否被封禁',
+    `like_count` INT DEFAULT 0,
+    `view_count` INT DEFAULT 0,
                                       PRIMARY KEY (`id`),
 #     FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
                                       KEY `idx_user_time` (`user_id`, `create_time` DESC)
@@ -145,10 +148,43 @@ CREATE TABLE IF NOT EXISTS `session` (
                                          `id` VARCHAR(255) COMMENT '会话id',
                                          `name` VARCHAR(255) NOT NULL,
                                          `user_id` BIGINT NOT NULL COMMENT '用户id',
-                                         `time` DATETIME DEFAULT NOW() COMMENT '会话时间',
+                                         `time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '会话时间',
                                          PRIMARY KEY (`id`),
                                          INDEX idx_user_id (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
+
+DROP TABLE IF EXISTS `ban_record`;
+
+CREATE TABLE `ban_record` (
+                              `id` BIGINT NOT NULL COMMENT '封禁记录ID',
+                              `user_id` BIGINT NOT NULL COMMENT '执行封禁操作的管理员/审查员ID',
+                              `target_id` BIGINT NOT NULL COMMENT '被封禁的目标ID（用户或帖子）',
+                              `type` TINYINT NOT NULL COMMENT '封禁类型：0=用户封禁，1=帖子封禁',
+                              `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                              PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='封禁记录表';
+
+DROP TABLE IF EXISTS `user_interest_score`;
+
+CREATE TABLE user_interest_score (
+                                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                                     user_id BIGINT NOT NULL COMMENT '用户id',
+                                     category_id INT NOT NULL COMMENT '分类id',
+                                     score INT DEFAULT 0 COMMENT '用户对分类兴趣评分',
+                                     UNIQUE KEY uk_user_category (user_id, category_id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT '用户对分类兴趣评分表';
+
+DROP TABLE IF EXISTS `file`;
+
+CREATE TABLE `file`(
+                       id BIGINT PRIMARY KEY COMMENT '文件ID',
+                       post_id BIGINT DEFAULT null COMMENT '帖子id，作为用户头像时值为null',
+                       user_id BIGINT DEFAULT null COMMENT '用户id，删除时判断是不是当前登录用户',
+                       url VARCHAR(30) COMMENT '文件url',
+                       hash CHAR(64) COMMENT 'SHA-256值',
+                       INDEX idx_hash (hash),
+                       INDEX idx_post_id (post_id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文件表';
 
 # drop table if exists `notification`;
 # # 通知表

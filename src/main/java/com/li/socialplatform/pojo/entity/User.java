@@ -74,6 +74,6 @@ public class User implements Serializable {
     private Boolean followPrivate; // 是否允许他人查看关注列表 (0: 允许, 1: 不允许)
 
     @Field(type = FieldType.Integer)
-    @TableField(exist = false)
-    private Integer count; // 粉丝数
+    @TableField(value = "fans_count")
+    private Integer fansCount; // 粉丝数
 }

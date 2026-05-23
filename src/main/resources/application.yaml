@@ -9,7 +9,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 172.20.165.155
+      host: 127.0.0.1
       port: 6379
       password: ${PASSWORD}
       timeout: 3000 # 超时时间
@@ -49,7 +49,7 @@ langchain4j:
 
 social-platform:
   system-constants:
-    user-nickname-prefix: "user_"
+    user-nickname-prefix: "u_"
     image-upload-dir: "D:\\Server\\nginx-1.28.0\\nginx-1.28.0\\html\\social_platform_dp\\imgs"
     base-url: "http://127.0.0.1:8080/imgs"
     default-page-size: 12

@@ -1,22 +1,22 @@
 package com.li.socialplatform.server.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
+import com.li.socialplatform.common.utils.AsyncTaskUtil;
+import com.li.socialplatform.common.utils.DataCacheUtil;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.common.utils.UserIntersetScoreUtil;
 import com.li.socialplatform.server.mapper.LikeMapper;
+import com.li.socialplatform.server.mapper.PostMapper;
 import com.li.socialplatform.pojo.entity.LikeRecord;
 import com.li.socialplatform.pojo.entity.Post;
 import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.server.service.ILikeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * @author e69d8e
@@ -25,54 +25,44 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@Transactional
 public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> implements ILikeService {
 
-    private final LikeMapper likeMapper;
+    private final PostMapper postMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
-    private final ElasticsearchOperations elasticsearchOperations;
+    private final AsyncTaskUtil asyncTaskUtil;
     private final UserIntersetScoreUtil userIntersetScoreUtil;
+    private final DataCacheUtil dataCacheUtil;
 
     @Override
     public Result like(Long postId) {
         Long userId = userIdUtil.getUserId();
         String key = KeyConstant.LIKE_KEY + postId;
-        Boolean member = redisTemplate.opsForSet().isMember(key, userId);
-        if (Boolean.TRUE.equals(member)) {
+        // 使用缓存层读取（缓存未命中时自动从 DB 加载）
+        boolean member = dataCacheUtil.isLiked(postId, userId);
+        Post post = postMapper.selectById(postId);
+        Long increment;
+        if (member) {
             // 点赞数-1
-            Long increment = redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, -1);
-            likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, postId).eq(LikeRecord::getUserId, userId));
+            increment = redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, -1);
             redisTemplate.opsForSet().remove(key, userId);
-            // 更新 Elasticsearch
-            Post post = elasticsearchOperations.get(postId.toString(), Post.class);
-            // 兴趣分值-1
+            asyncTaskUtil.asyncDeleteLikeRecord(postId, userId);
             if (post != null) {
                 userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), -2);
             }
-            if (post != null) {
-                if (increment != null) {
-                    post.setCount(increment.intValue());
-                    elasticsearchOperations.save(post);
-                }
-            }
         } else {
             // 点赞数+1
-            Long increment = redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, 1);
-            likeMapper.insert(new LikeRecord(null, postId, userId, null));
+            increment = redisTemplate.opsForValue().increment(KeyConstant.LIKE_COUNT + postId, 1);
             redisTemplate.opsForSet().add(key, userId);
-            // 更新 Elasticsearch
-            Post post = elasticsearchOperations.get(postId.toString(), Post.class);
-            // 兴趣分值+1
+            asyncTaskUtil.asyncInsertLikeRecord(postId, userId);
             if (post != null) {
                 userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 2);
             }
-            if (post != null) {
-                if (increment != null) {
-                    post.setCount(increment.intValue());
-                    elasticsearchOperations.save(post);
-                }
-            }
+        }
+        // 续期 TTL
+        dataCacheUtil.setLikeTTL(postId);
+        if (increment != null) {
+            asyncTaskUtil.syncPostLikeCount(postId, increment.intValue());
         }
         return Result.ok(MessageConstant.LIKE_SUCCESS, "");
     }

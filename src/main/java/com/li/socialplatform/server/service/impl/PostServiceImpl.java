@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -57,6 +58,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final DeleteFileUtil deleteFileUtil;
     private final RedisIdUtils redisIdUtils;
     private final UserIntersetScoreUtil userIntersetScoreUtil;
+    private final DataCacheUtil dataCacheUtil;
     private final ElasticsearchTemplate elasticsearchTemplate;
 
     // 获取当前登录用户的用户名
@@ -111,7 +113,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<Long> fanIds = getFanIds(id);
         // 将帖子添加到粉丝缓存
         fanIds.forEach(fanId -> redisTemplate.opsForZSet().add(KeyConstant.POST_LIST_KEY + fanId, post.getId(), time));
-        post.setCount(0);
+        post.setLikeCount(0);
         post.setEnabled(true);
         // 转换为纯文本
         String text = HtmlUtils.htmlToPlainText(postDTO.getContent());
@@ -130,7 +132,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         // 获取当前用户
         User loginUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
         Long userId = userIdUtil.getUserId();
-        userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 1);
+        if (userId != null) {
+            userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 1);
+        }
         if (loginUser != null) {
             if (!post.getEnabled() && !loginUser.getAuthorityId().equals(AuthorityConstant.REVIEWER)) {
                 return Result.error(MessageConstant.POST_NOT_EXIST);
@@ -147,15 +151,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         // 查询是否点过赞
         PostDetailVO postDetailVO = BeanUtil.copyProperties(post, PostDetailVO.class);
         postDetailVO.setCategory(categoryMapper.selectById(post.getCategoryId()).getName());
-        postDetailVO.setLiked(
-                Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
-        Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
-        postDetailVO.setCount(count == null ? 0 : count);
+        postDetailVO.setLiked(dataCacheUtil.isLiked(id, userId));
+        postDetailVO.setLikeCount(dataCacheUtil.getLikeCount(id));
         postDetailVO.setAvatar(user.getAvatar());
         postDetailVO.setNickname(user.getNickname());
         postDetailVO.setCover(post.getCover());
-        Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
-        postDetailVO.setFollowed(score != null);
+        postDetailVO.setFollowed(dataCacheUtil.isFollowed(userId, user.getId()));
+        // 记录浏览量到 Redis
+        redisTemplate.opsForValue().increment(KeyConstant.POST_VIEW_COUNT + id, 1);
+        Integer viewCount = (Integer) redisTemplate.opsForValue().get(KeyConstant.POST_VIEW_COUNT + id);
+        postDetailVO.setViewCount((post.getViewCount() == null ? 0 : post.getViewCount()) + (viewCount == null ? 0 : viewCount));
         return Result.ok(postDetailVO);
     }
 
@@ -173,10 +178,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         }
 
         // 获取用户兴趣评分
-        Map<Integer, Integer> interestScores = getUserIntersetScore(userId);
-        boolean hasInterest = interestScores.values().stream().anyMatch(s -> s > 0);
+        Map<Integer, Integer> interestScores = userIntersetScoreUtil.getUserInterestScores(userId);
 
-        if (!hasInterest) {
+        if (interestScores.isEmpty()) {
             // 无兴趣数据：按时间倒序
             Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
                     .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
@@ -203,6 +207,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
                     b.minimumShouldMatch("0");
                     return b;
                 })))
+                .withSort(Sort.by(Sort.Direction.DESC, "createTime"))
                 .withPageable(PageRequest.of(offset / pageSize, pageSize))
                 .build();
 
@@ -213,9 +218,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         for (SearchHit<Post> hit : searchHits) {
             Post post = hit.getContent();
             PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
-            postVO.setCount(count == null ? 0 : count);
-            postVO.setLiked(Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + post.getId(), userId)));
+            postVO.setLikeCount(dataCacheUtil.getLikeCount(post.getId()));
+            postVO.setLiked(dataCacheUtil.isLiked(post.getId(), userId));
             postVOS.add(postVO);
             if (post.getCreateTime() != null) {
                 minTime = post.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -227,18 +231,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         result.setMinTime(minTime);
         result.setOffset(offset + postVOS.size());
         return Result.ok(result);
-    }
-
-    // 获取用户兴趣评分
-    private Map<Integer, Integer> getUserIntersetScore(Long userId) {
-        Map<Integer, Integer> score = new HashMap<>();
-        List<Category> categories = categoryMapper.selectList(null);
-        for (Category category : categories) {
-            Object o = redisTemplate.opsForHash()
-                    .get(KeyConstant.USER_INTEREST_SCORE_KEY + userId, String.valueOf(category.getId()));
-            score.put(category.getId(), o == null ? 0 : (Integer) o);
-        }
-        return score;
     }
 
     @Override
@@ -260,13 +252,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         Long userId = userIdUtil.getUserId();
         for (Post record : records) {
             PostVO postVO = BeanUtil.copyProperties(record, PostVO.class);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + record.getId());
-            postVO.setCount(count == null ? 0 : count);
+            postVO.setLikeCount(dataCacheUtil.getLikeCount(record.getId()));
             if (userId == null) {
                 postVO.setLiked(false);
             } else {
-                postVO.setLiked(redisTemplate.opsForSet()
-                        .isMember(KeyConstant.LIKE_KEY + record.getId(), userId));
+                postVO.setLiked(dataCacheUtil.isLiked(record.getId(), userId));
             }
             postVOS.add(postVO);
         }
@@ -302,8 +292,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         for (File file : files) {
             deleteFileUtil.deleteFile(file.getUrl());
         }
-        // 删除封面图片
-        deleteFileUtil.deleteFile(post.getCover().substring(systemConstants.baseUrl.length()));
+        String cover = post.getCover();
+        if (cover != null && !cover.isEmpty()) {
+            // 删除封面图片
+            deleteFileUtil.deleteFile(cover.substring(systemConstants.baseUrl.length()));
+        }
         // 删除帖子点赞数据
         likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, id));
         // 删除帖子redis的点赞数据
@@ -361,12 +354,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
                 continue;
             }
             PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
-            postVO.setCount(count == null ? 0 : count);
+            postVO.setLikeCount(dataCacheUtil.getLikeCount(id));
             if (userId == null) {
                 postVO.setLiked(false);
             } else {
-                postVO.setLiked(Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
+                postVO.setLiked(dataCacheUtil.isLiked(id, userId));
             }
             postVOS.add(postVO);
         }

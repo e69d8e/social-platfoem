@@ -3,6 +3,8 @@ package com.li.socialplatform.server.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
+import com.li.socialplatform.common.utils.BanCacheUtil;
+import com.li.socialplatform.common.utils.DataCacheUtil;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.server.mapper.CommentMapper;
 import com.li.socialplatform.server.mapper.PostMapper;
@@ -30,6 +32,8 @@ public class ReviewerServiceImpl implements IReviewerService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
     private final CommentMapper commentMapper;
+    private final DataCacheUtil dataCacheUtil;
+    private final BanCacheUtil banCacheUtil;
 
     @Override
     public Result banPost(Long id) {
@@ -37,14 +41,13 @@ public class ReviewerServiceImpl implements IReviewerService {
         if (post == null) {
             return Result.error(MessageConstant.POST_NOT_EXIST);
         }
+        Long reviewerId = userIdUtil.getUserId();
         post.setEnabled(!post.getEnabled());
-        // 将封禁的帖子加入缓存中
         if (!post.getEnabled()) {
-            redisTemplate.opsForZSet().add(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id, System.currentTimeMillis());
+            banCacheUtil.addBanPost(reviewerId, id);
         } else {
-            redisTemplate.opsForZSet().remove(KeyConstant.BAN_POST_KEY + userIdUtil.getUserId(), id);
+            banCacheUtil.removeBanPost(reviewerId, id);
         }
-        // 更新数据库
         return postMapper.updateById(post) > 0 ? Result.ok(MessageConstant.BAN_SUCCESS, "") : Result.error(MessageConstant.BAN_FAIL);
     }
 
@@ -53,8 +56,8 @@ public class ReviewerServiceImpl implements IReviewerService {
         long start = ((long) (pageNum - 1) * pageSize);
         long end = start + pageSize - 1;
         Long userId = userIdUtil.getUserId();
-        Long total = redisTemplate.opsForZSet().size(KeyConstant.BAN_POST_KEY + userId);
-        if (total == null) {
+        Long total = banCacheUtil.getBanPostTotal(userId);
+        if (total == null || total == 0) {
             return Result.ok(List.of(), 0L);
         }
         if (start > total) {
@@ -63,7 +66,7 @@ public class ReviewerServiceImpl implements IReviewerService {
         if (end > total) {
             end = total - 1;
         }
-        Set<Object> members = redisTemplate.opsForZSet().range(KeyConstant.BAN_POST_KEY + userId, start, end);
+        Set<Object> members = banCacheUtil.getBanPostIds(userId, start, end);
         if (members == null || members.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -72,9 +75,9 @@ public class ReviewerServiceImpl implements IReviewerService {
         for (Long id : ids) {
             Post post = postMapper.selectById(id);
             PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
-            postVO.setCount((Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id));
+            postVO.setLikeCount(dataCacheUtil.getLikeCount(id));
             if (userId != null) {
-                postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId));
+                postVO.setLiked(dataCacheUtil.isLiked(id, userId));
             } else {
                 postVO.setLiked(false);
             }

@@ -25,11 +25,12 @@ public class PostDetailVO implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
     private Boolean liked;
-    private Integer count;
+    private Integer likeCount;
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long userId;
     private String nickname;
     private String avatar;
     private Boolean followed;
     private Boolean enabled;
+    private Integer viewCount;
 }

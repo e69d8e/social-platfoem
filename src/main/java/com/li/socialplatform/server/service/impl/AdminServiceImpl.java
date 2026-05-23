@@ -2,8 +2,9 @@ package com.li.socialplatform.server.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.li.socialplatform.common.constant.AuthorityConstant;
-import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
+import com.li.socialplatform.common.utils.BanCacheUtil;
+import com.li.socialplatform.common.utils.DataCacheUtil;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.Result;
@@ -11,7 +12,6 @@ import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.server.service.IAdminService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,8 +28,9 @@ import java.util.Set;
 public class AdminServiceImpl implements IAdminService {
 
     private final UserMapper userMapper;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
+    private final DataCacheUtil dataCacheUtil;
+    private final BanCacheUtil banCacheUtil;
 
     @Override
     public Result banUser(Long id) {
@@ -38,9 +39,9 @@ public class AdminServiceImpl implements IAdminService {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
         if (user.getEnabled()) {
-            redisTemplate.opsForZSet().add(KeyConstant.BAN_USER_KEY, id, System.currentTimeMillis());
+            banCacheUtil.addBanUser(userIdUtil.getUserId(), id);
         } else {
-            redisTemplate.opsForZSet().remove(KeyConstant.BAN_USER_KEY, id);
+            banCacheUtil.removeBanUser(id);
         }
         user.setEnabled(!user.getEnabled());
         return userMapper.updateById(user) > 0 ? Result.ok(MessageConstant.BAN_SUCCESS, "") : Result.error(MessageConstant.BAN_FAIL);
@@ -50,8 +51,8 @@ public class AdminServiceImpl implements IAdminService {
     public Result getBanUser(Integer pageNum, Integer pageSize) {
         long start = ((long) (pageNum - 1) * pageSize);
         long end = start + pageSize - 1;
-        Long total = redisTemplate.opsForZSet().size(KeyConstant.BAN_USER_KEY);
-        if (total == null) {
+        Long total = banCacheUtil.getBanUserTotal();
+        if (total == null || total == 0) {
             return Result.ok(List.of(), 0L);
         }
         if (start > total) {
@@ -60,7 +61,7 @@ public class AdminServiceImpl implements IAdminService {
         if (end > total) {
             end = total - 1;
         }
-        Set<Object> members = redisTemplate.opsForZSet().range(KeyConstant.BAN_USER_KEY, start, end);
+        Set<Object> members = banCacheUtil.getBanUserIds(start, end);
         if (members == null || members.isEmpty()) {
             return Result.ok(List.of(), 0L);
         }
@@ -70,10 +71,9 @@ public class AdminServiceImpl implements IAdminService {
             User user = userMapper.selectById(id);
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
             userVO.setEnabled(false);
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userIdUtil.getUserId(), id);
-            userVO.setFollowed(score != null);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-            userVO.setCount(count == null ? 0 : count);
+            Long currentUserId = userIdUtil.getUserId();
+            userVO.setFollowed(currentUserId != null && dataCacheUtil.isFollowed(currentUserId, id));
+            userVO.setFansCount(dataCacheUtil.getFollowerCount(user.getId()));
             users.add(userVO);
         }
         return Result.ok(users, total);

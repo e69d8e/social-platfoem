@@ -86,7 +86,6 @@ public class SecurityConfig {
                     exception.authenticationEntryPoint(new MyAuthenticationEntryPoint());
                     exception.accessDeniedHandler(new MyAccessDeniedHandler());// 拒绝访问处理 用户没有访问权限的时候
                 }
-
         );
         // 跨域
         http.cors(cors -> {

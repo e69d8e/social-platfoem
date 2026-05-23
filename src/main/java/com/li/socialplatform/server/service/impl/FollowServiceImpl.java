@@ -1,10 +1,11 @@
 package com.li.socialplatform.server.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
+import com.li.socialplatform.common.utils.AsyncTaskUtil;
+import com.li.socialplatform.common.utils.DataCacheUtil;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.server.mapper.FollowMapper;
 import com.li.socialplatform.server.mapper.UserMapper;
@@ -15,7 +16,6 @@ import com.li.socialplatform.pojo.vo.UserVO;
 import com.li.socialplatform.server.service.IFollowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
@@ -31,29 +31,26 @@ import java.util.*;
 @Slf4j
 public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> implements IFollowService {
 
-    private final FollowMapper followMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserMapper userMapper;
     private final UserIdUtil userIdUtil;
-    private final ElasticsearchOperations elasticsearchOperations;
+    private final AsyncTaskUtil asyncTaskUtil;
+    private final DataCacheUtil dataCacheUtil;
 
     @Override
     public Result follow(Long id) {
         if (id == null) {
             return Result.error(MessageConstant.ID_IS_NULL);
         }
-        // 获取当前用户id
         Long userId = userIdUtil.getUserId();
         if (Objects.equals(userId, id)) {
             return Result.error(MessageConstant.USER_CANNOT_FOLLOW_SELF);
         }
-        // 判断用户是否存在
         if (userMapper.selectById(id) == null) {
             return Result.error(MessageConstant.USER_NOT_EXIST);
         }
-        Follow follow = followMapper.selectOne(new LambdaQueryWrapper<Follow>()
-                .eq(Follow::getFolloweeId, id).eq(Follow::getFollowerId, userId));
-        if (follow != null) {
+        // Redis 去重：检查是否已关注（缓存未命中时自动从 DB 加载）
+        if (dataCacheUtil.isFollowed(userId, id)) {
             return Result.error(MessageConstant.USER_IS_FOLLOWED);
         }
         long time = System.currentTimeMillis();
@@ -63,15 +60,13 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         redisTemplate.opsForZSet().add(KeyConstant.FANS_LIST_KEY + id, userId, time);
         // 缓存关注列表
         redisTemplate.opsForZSet().add(KeyConstant.Follow_LIST_KEY + userId, id, time);
-        // 添加关注
-        followMapper.insert(new Follow(null, userId, id, null));
-        // 更新 ElasticSearch
-        User user = elasticsearchOperations.get(id.toString(), User.class);
-        if (user != null) {
-            if (increment != null) {
-                user.setCount(increment.intValue());
-                elasticsearchOperations.save(user);
-            }
+        // 续期 TTL
+        dataCacheUtil.setFollowTTL(userId, id);
+        // 异步写入 MySQL
+        asyncTaskUtil.asyncInsertFollowRecord(userId, id);
+        // 异步同步 ES
+        if (increment != null) {
+            asyncTaskUtil.syncUserFansCount(id, increment.intValue());
         }
         // 将要关注用户的帖子查找出来
         Set<ZSetOperations.TypedTuple<Object>> typedTuples =
@@ -79,14 +74,10 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (typedTuples == null || typedTuples.isEmpty()) {
             return Result.ok(MessageConstant.FOLLOW_SUCCESS, "");
         }
-        // 解析
-        // 获取 id
         List<Long> ids = typedTuples.stream()
                 .map(ZSetOperations.TypedTuple::getValue).map(String::valueOf).map(Long::valueOf).toList();
-        // 获取 score
         List<Double> scores = typedTuples.stream()
                 .map(ZSetOperations.TypedTuple::getScore).toList();
-        // 关注后要将该用户的所有帖子推送到我的关注
         String key = KeyConstant.POST_LIST_KEY + userId;
         for (int i = 0; i < ids.size(); i++) {
             redisTemplate.opsForZSet().add(key, ids.get(i), scores.get(i));
@@ -99,29 +90,25 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (id == null) {
             return Result.error(MessageConstant.ID_IS_NULL);
         }
-        // 获取当前用户id
         Long userId = userIdUtil.getUserId();
-        int delete = followMapper.delete(
-                new LambdaQueryWrapper<Follow>().eq(Follow::getFolloweeId, id)
-                        .eq(Follow::getFollowerId, userId));
-        if (delete == 0) {
-            return Result.error(MessageConstant.USER_NOT_FOLLOWED, List.of());
-        }
-
         if (Objects.equals(userId, id)) {
             return Result.error(MessageConstant.USER_CANNOT_FOLLOW_SELF);
+        }
+        // Redis 去重：检查是否已关注（缓存未命中时自动从 DB 加载）
+        if (!dataCacheUtil.isFollowed(userId, id)) {
+            return Result.error(MessageConstant.USER_NOT_FOLLOWED, List.of());
         }
         // 粉丝数减一
         Long increment = redisTemplate.opsForValue().increment(KeyConstant.FOLLOW_COUNT_KEY + id, -1);
         redisTemplate.opsForZSet().remove(KeyConstant.FANS_LIST_KEY + id, userId);
         redisTemplate.opsForZSet().remove(KeyConstant.Follow_LIST_KEY + userId, id);
-        // 更新 ElasticSearch
-        User user = elasticsearchOperations.get(id.toString(), User.class);
-        if (user != null) {
-            if (increment != null) {
-                user.setCount(increment.intValue());
-                elasticsearchOperations.save(user);
-            }
+        // 续期 TTL
+        dataCacheUtil.setFollowTTL(userId, id);
+        // 异步删除 MySQL
+        asyncTaskUtil.asyncDeleteFollowRecord(userId, id);
+        // 异步同步 ES
+        if (increment != null) {
+            asyncTaskUtil.syncUserFansCount(id, increment.intValue());
         }
         // 将要取关的用户的帖子查找出来
         Set<ZSetOperations.TypedTuple<Object>> typedTuples =
@@ -131,7 +118,6 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         }
         List<Object> ids = typedTuples.stream()
                 .map(ZSetOperations.TypedTuple::getValue).toList();
-        // 删除要取关用户的帖子
         String key = KeyConstant.POST_LIST_KEY + userId;
         for (Object o : ids) {
             redisTemplate.opsForZSet().remove(key, o);
@@ -174,11 +160,9 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         List<User> users = userMapper.selectByIds(ids);
         List<UserVO> userVOs = users.stream().map(user -> {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-            userVO.setCount(count == null ? 0 : count);
+            userVO.setFansCount(dataCacheUtil.getFollowerCount(user.getId()));
             if (userId != null) {
-                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
-                userVO.setFollowed(score != null);
+                userVO.setFollowed(dataCacheUtil.isFollowed(userId, user.getId()));
             } else {
                 userVO.setFollowed(false);
             }
@@ -225,13 +209,10 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             if (isSelf) {
                 userVO.setFollowed(true);
             } else {
-                // 查询该用户是否是当前用户的关注者
                 Long userId = userIdUtil.getUserId();
-                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
-                userVO.setFollowed(score != null);
+                userVO.setFollowed(dataCacheUtil.isFollowed(userId, user.getId()));
             }
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-            userVO.setCount(count == null ? 0 : count);
+            userVO.setFansCount(dataCacheUtil.getFollowerCount(user.getId()));
             userVOs.add(userVO);
         }
         return Result.ok(userVOs, total);
@@ -258,8 +239,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         for (User user : users) {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
             userVO.setFollowed(true);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-            userVO.setCount(count == null ? 0 : count);
+            userVO.setFansCount(dataCacheUtil.getFollowerCount(user.getId()));
             userVOs.add(userVO);
         }
         return Result.ok(userVOs, total);

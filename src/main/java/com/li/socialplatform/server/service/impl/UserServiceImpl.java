@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.DataCacheUtil;
 import com.li.socialplatform.common.utils.DeleteFileUtil;
 import com.li.socialplatform.common.utils.JwtUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
@@ -41,6 +42,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -75,6 +77,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final AuthenticationManager authenticationManager;
     private final DeleteFileUtil deleteFileUtil;
     private final FileMapper fileMapper;
+    private final DataCacheUtil dataCacheUtil;
 
     @Value("${jwt.access-expire}")
     private Long accessExpire;
@@ -98,12 +101,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result login(LoginDTO loginDTO) {
+        // 判断账号是否存在
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, loginDTO.getUsername()));
+        if (user == null) {
+            return Result.error(MessageConstant.USER_NOT_EXIST);
+        }
+        if (!user.getEnabled()) {
+            return Result.error(MessageConstant.USER_NOT_ENABLED);
+        }
         // 1. 创建未认证的 UsernamePasswordAuthenticationToken
         UsernamePasswordAuthenticationToken authToken =
                 new UsernamePasswordAuthenticationToken(loginDTO.getUsername(), loginDTO.getPassword());
 
         // 2. 调用 AuthenticationManager 进行认证（会触发 UserDetailsService 和 PasswordEncoder）
-        Authentication authentication = authenticationManager.authenticate(authToken);
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(authToken);
+        } catch (AuthenticationException e) {
+            return Result.error(MessageConstant.USER_PASSWORD_ERROR);
+        }
 
         // 3. 认证成功后，从 Authentication 对象中获取用户信息
         //    getPrincipal() 返回的是 UserDetails 对象（即之前自定义的 SecurityUser 实例）
@@ -192,13 +208,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         User user = new User();
         // 使用UUID生成随机昵称
         String uuid = UUID.randomUUID().toString().replace("-", "");
-        user.setNickname(systemConstants.userNicknamePrefix + uuid);
+        user.setNickname(systemConstants.userNicknamePrefix + uuid.substring(10));
         user.setPassword(encodePassword(userDTO.getPassword()));
         user.setUsername(userDTO.getUsername());
         user.setAvatar(systemConstants.defaultAvatar);
         userMapper.insert(user);
         // 将用户信息存入 Elasticsearch
-        user.setCount(0);
+        user.setFansCount(0);
         userElasticsearchRepository.save(user);
         return Result.ok(MessageConstant.REGISTER_SUCCESS, "");
     }
@@ -225,14 +241,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             // 查询当前用户有没有关注
             Long userId = userIdUtil.getUserId();
             if (userId != null) {
-                Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, id);
-                followed = score != null;
+                followed = dataCacheUtil.isFollowed(userId, id);
             }
         }
         // 获取角色
         UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
-        Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + id);
-        userVO.setCount(count == null ? 0 : count);
+        userVO.setFansCount(dataCacheUtil.getFollowerCount(id));
         userVO.setFollowed(followed);
         return Result.ok(userVO);
     }
@@ -340,7 +354,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result listPost(String keyword, Integer pageNum, Integer pageSize, Integer categoryId) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "count");
+        Sort sort = Sort.by(Sort.Direction.DESC, "likeCount");
         Pageable pageable = PageRequest.of(pageNum - 1, pageSize, sort);
         List<Post> posts;
         Long total;
@@ -371,10 +385,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             if (userId == null) {
                 postVO.setLiked(false);
             } else {
-                postVO.setLiked(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + post.getId(), userId));
+                postVO.setLiked(dataCacheUtil.isLiked(post.getId(), userId));
             }
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
-            postVO.setCount(count == null ? 0 : count);
+            postVO.setLikeCount(dataCacheUtil.getLikeCount(post.getId()));
             postVOS.add(postVO);
         }
         return Result.ok(postVOS, total);
@@ -418,7 +431,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result listUser(String keyword, Integer pageNum, Integer pageSize) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "count");
+        Sort sort = Sort.by(Sort.Direction.DESC, "fansCount");
         Pageable pageable = PageRequest.of(pageNum - 1, pageSize, sort);
         List<User> users = userElasticsearchRepository.findByUsernameOrNickname(keyword, keyword, pageable);
         long total = userElasticsearchRepository.count();
@@ -428,10 +441,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         List<UserVO> userVOS = new ArrayList<>();
         for (User user : users) {
             UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userIdUtil.getUserId(), user.getId());
-            userVO.setFollowed(score != null);
-            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-            userVO.setCount(count == null ? 0 : count);
+            Long currentUserId = userIdUtil.getUserId();
+            userVO.setFollowed(currentUserId != null && dataCacheUtil.isFollowed(currentUserId, user.getId()));
+            userVO.setFansCount(dataCacheUtil.getFollowerCount(user.getId()));
             userVOS.add(userVO);
         }
         return Result.ok(userVOS, total);

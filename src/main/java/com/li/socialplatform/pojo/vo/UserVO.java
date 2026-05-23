@@ -32,5 +32,5 @@ public class UserVO implements Serializable {
     private Boolean followPrivate;
 
     private Boolean followed;
-    private Integer count;
+    private Integer fansCount;
 }

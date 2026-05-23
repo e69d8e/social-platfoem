@@ -36,7 +36,10 @@ public class PostVO implements Serializable {
     private LocalDateTime createTime;
 
     private Boolean liked; // 是否点赞
-    private Integer count; // 点赞数
+
+    private Integer likeCount; // 点赞数
+
+    private Integer viewCount;
 
     private Boolean enabled;
 }

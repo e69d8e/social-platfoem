@@ -53,6 +53,10 @@ public class Post implements Serializable {
     private Boolean enabled;
 
     @Field(type = FieldType.Integer)
-    @TableField(exist = false)
-    private Integer count;
+    @TableField("like_count")
+    private Integer likeCount;
+
+    @Field(type = FieldType.Integer)
+    @TableField("view_count")
+    private Integer viewCount;
 }

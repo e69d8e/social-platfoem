@@ -45,7 +45,8 @@ class SocialPlatformApplicationTests {
             postMapper.selectList(null).forEach(post -> {
                 Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
                 post.setContent(HtmlUtils.htmlToPlainText(post.getContent()));
-                post.setCount(count == null ? 0 : count);
+                post.setLikeCount(count == null ? 0 : count);
+                post.setViewCount(post.getViewCount() == null ? 0 : post.getViewCount());
                 elasticsearchOperations.save(post);
             });
         } catch (Exception e) {
@@ -59,7 +60,7 @@ class SocialPlatformApplicationTests {
             // 将数据库中的user数据导入ElasticSearch
             userMapper.selectList(null).forEach(user -> {
                 Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.FOLLOW_COUNT_KEY + user.getId());
-                user.setCount(count == null ? 0 : count);
+                user.setFansCount(count == null ? 0 : count);
                 elasticsearchOperations.save(user);
             });
         } catch (Exception e) {
