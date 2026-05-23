@@ -47,8 +47,8 @@ public class SecurityConfig {
                                                 "/comment/post/{id}", // 获取一级评论
                                                 "/comment/post/{id}/{commentId}", // 获取二级评论
                                                 "/post/user/{id}", // 获取用户帖子列表
-                                                "/upload/avatar", // 上传头像
-                                                "/upload/post", // 上传帖子图片
+//                                                "/upload/avatar", // 上传头像
+//                                                "/upload/post", // 上传帖子图片
                                                 "/user/list/post", // 获取用户帖子列表
                                                 "/category", // 获取帖子分类
                                                 "/send", // 测试发送消息

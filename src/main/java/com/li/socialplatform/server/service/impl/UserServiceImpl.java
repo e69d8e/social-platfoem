@@ -6,11 +6,14 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.DeleteFileUtils;
 import com.li.socialplatform.common.utils.JwtUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.pojo.dto.LoginDTO;
 import com.li.socialplatform.pojo.dto.RefreshDTO;
+import com.li.socialplatform.pojo.entity.File;
 import com.li.socialplatform.pojo.vo.TokenVO;
+import com.li.socialplatform.server.mapper.FileMapper;
 import com.li.socialplatform.server.repository.PostElasticsearchRepository;
 import com.li.socialplatform.server.repository.UserElasticsearchRepository;
 import com.li.socialplatform.server.mapper.UserMapper;
@@ -68,6 +71,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final PostElasticsearchRepository postElasticsearchRepository;
     private final JwtUtils jwtUtils;
     private final AuthenticationManager authenticationManager;
+    private final DeleteFileUtils deleteFileUtils;
+    private final FileMapper fileMapper;
 
     @Value("${jwt.access-expire}")
     private Long accessExpire;
@@ -240,6 +245,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         userMapper.updateById(user);
         // 更新 Elasticsearch
         userElasticsearchRepository.save(user);
+        // 删除旧头像
+        if (userDTO.getAvatar() != null
+                && !userDTO.getAvatar().isEmpty()
+                && !userDTO.getAvatar().equals(userDTO.getOldAvatar())
+                && userDTO.getOldAvatar() != null
+                && !userDTO.getOldAvatar().equals(systemConstants.defaultAvatar)) {
+            String url = userDTO.getOldAvatar().substring(systemConstants.baseUrl.length());
+            int delete = fileMapper.delete(new LambdaQueryWrapper<File>().eq(File::getUrl, url).eq(File::getUserId, user.getId()));
+            if (delete >0) {
+                deleteFileUtils.deleteFile(url);
+            }
+        }
         return Result.ok(MessageConstant.UPDATE_SUCCESS, "");
     }
 

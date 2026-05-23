@@ -19,4 +19,5 @@ public class KeyConstant {
     public static final String BAN_USER_KEY = "ban-use-list:";
     public static final String FRIEND_LIST_KEY = "friend-list:";
     public static final String REFRESH_KEY = "refresh:";
+    public static final String POST_ID_KEY = "post:";
 }

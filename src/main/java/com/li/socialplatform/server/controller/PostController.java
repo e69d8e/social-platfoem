@@ -55,4 +55,10 @@ public class PostController {
         return postService.deletePost(id);
     }
 
+    // 生成帖子id
+    @GetMapping
+    public Result generatePostId() {
+        return postService.generatePostId();
+    }
+
 }

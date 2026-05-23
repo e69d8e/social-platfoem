@@ -14,6 +14,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PostDTO implements Serializable {
+    private Long id;
     private String cover;
     private String title;
     private String content;

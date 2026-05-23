@@ -9,16 +9,16 @@ import com.li.socialplatform.common.constant.AuthorityConstant;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
+import com.li.socialplatform.common.utils.DeleteFileUtils;
 import com.li.socialplatform.common.utils.HtmlUtils;
+import com.li.socialplatform.common.utils.RedisIdUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
 import com.li.socialplatform.pojo.vo.PostDetailVO;
 import com.li.socialplatform.pojo.vo.PostVO;
+import com.li.socialplatform.server.mapper.*;
 import com.li.socialplatform.server.repository.PostElasticsearchRepository;
-import com.li.socialplatform.server.mapper.CategoryMapper;
-import com.li.socialplatform.server.mapper.PostMapper;
-import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.server.service.IPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +27,7 @@ import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +48,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final SystemConstants systemConstants;
     private final UserIdUtil userIdUtil;
     private final PostElasticsearchRepository postElasticsearchRepository;
+    private final CommentMapper commentMapper;
+    private final LikeMapper likeMapper;
+    private final FileMapper fileMapper;
+    private final DeleteFileUtils deleteFileUtils;
+    private final RedisIdUtils redisIdUtils;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -68,6 +74,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             return Result.error(MessageConstant.CONTENT_IS_NULL);
         }
         Post post = new Post();
+        post.setId(postDTO.getId());
         post.setUserId(id);
         String title = postDTO.getTitle();
         // 限制帖子标题长度
@@ -195,6 +202,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         return Result.ok(postVOS, postIPage.getTotal());
     }
 
+    @Transactional
     @Override
     public Result deletePost(Long id) {
         // 当前登录用户id
@@ -215,7 +223,35 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         redisTemplate.opsForZSet().remove(KeyConstant.POST_LIST_KEY, id);
         // 我的帖子删除
         redisTemplate.opsForZSet().remove(KeyConstant.POST_KEY + userId, id);
+        // 删除帖子的评论
+        commentMapper.delete(new LambdaQueryWrapper<Comment>().eq(Comment::getPostId, id));
+        // 删除帖子的图片
+        List<File> files = fileMapper.selectList(new LambdaQueryWrapper<File>().eq(File::getPostId, id));
+        fileMapper.delete(new LambdaQueryWrapper<File>().eq(File::getPostId, id));
+        for (File file : files) {
+            deleteFileUtils.deleteFile(file.getUrl());
+        }
+        // 删除封面图片
+        deleteFileUtils.deleteFile(post.getCover().substring(systemConstants.baseUrl.length()));
+        // 删除帖子点赞数据
+        likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, id));
+        // 删除帖子redis的点赞数据
+        try {
+            redisTemplate.opsForSet().remove(KeyConstant.LIKE_KEY + id);
+        } catch (Exception e) {
+            log.error("删除帖子点赞数据失败", e);
+        }
+        redisTemplate.delete(KeyConstant.LIKE_COUNT + id);
+        // 删除Elasticsearch的数据
+        postElasticsearchRepository.deleteById(id);
+
         return Result.ok(MessageConstant.DELETE_SUCCESS, "");
+    }
+
+    @Override
+    public Result generatePostId() {
+        Long id = redisIdUtils.nextId(KeyConstant.POST_ID_KEY);
+        return Result.ok(id);
     }
 
     private List<Long> getFanIds(Long userId) {
