@@ -5,9 +5,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.common.utils.UserIntersetScoreUtil;
 import com.li.socialplatform.server.mapper.LikeMapper;
-import com.li.socialplatform.server.mapper.PostMapper;
-import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.entity.LikeRecord;
 import com.li.socialplatform.pojo.entity.Post;
 import com.li.socialplatform.pojo.entity.Result;
@@ -33,6 +32,7 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserIdUtil userIdUtil;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final UserIntersetScoreUtil userIntersetScoreUtil;
 
     @Override
     public Result like(Long postId) {
@@ -46,6 +46,10 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
             redisTemplate.opsForSet().remove(key, userId);
             // 更新 Elasticsearch
             Post post = elasticsearchOperations.get(postId.toString(), Post.class);
+            // 兴趣分值-1
+            if (post != null) {
+                userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), -2);
+            }
             if (post != null) {
                 if (increment != null) {
                     post.setCount(increment.intValue());
@@ -59,6 +63,10 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, LikeRecord> impleme
             redisTemplate.opsForSet().add(key, userId);
             // 更新 Elasticsearch
             Post post = elasticsearchOperations.get(postId.toString(), Post.class);
+            // 兴趣分值+1
+            if (post != null) {
+                userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 2);
+            }
             if (post != null) {
                 if (increment != null) {
                     post.setCount(increment.intValue());

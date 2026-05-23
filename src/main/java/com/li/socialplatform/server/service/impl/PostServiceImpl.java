@@ -9,12 +9,10 @@ import com.li.socialplatform.common.constant.AuthorityConstant;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
-import com.li.socialplatform.common.utils.DeleteFileUtils;
-import com.li.socialplatform.common.utils.HtmlUtils;
-import com.li.socialplatform.common.utils.RedisIdUtils;
-import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.common.utils.*;
 import com.li.socialplatform.pojo.dto.PostDTO;
 import com.li.socialplatform.pojo.entity.*;
+import com.li.socialplatform.pojo.entity.Result;
 import com.li.socialplatform.pojo.vo.PostDetailVO;
 import com.li.socialplatform.pojo.vo.PostVO;
 import com.li.socialplatform.server.mapper.*;
@@ -22,6 +20,12 @@ import com.li.socialplatform.server.repository.PostElasticsearchRepository;
 import com.li.socialplatform.server.service.IPostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.security.core.Authentication;
@@ -29,9 +33,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.time.ZoneId;
+import java.util.*;
 
 /**
  * @author e69d8e
@@ -51,8 +54,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
     private final CommentMapper commentMapper;
     private final LikeMapper likeMapper;
     private final FileMapper fileMapper;
-    private final DeleteFileUtils deleteFileUtils;
+    private final DeleteFileUtil deleteFileUtil;
     private final RedisIdUtils redisIdUtils;
+    private final UserIntersetScoreUtil userIntersetScoreUtil;
+    private final ElasticsearchTemplate elasticsearchTemplate;
 
     // 获取当前登录用户的用户名
     private String getCurrentUsername() {
@@ -124,6 +129,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         }
         // 获取当前用户
         User loginUser = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, getCurrentUsername()));
+        Long userId = userIdUtil.getUserId();
+        userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 1);
         if (loginUser != null) {
             if (!post.getEnabled() && !loginUser.getAuthorityId().equals(AuthorityConstant.REVIEWER)) {
                 return Result.error(MessageConstant.POST_NOT_EXIST);
@@ -138,36 +145,100 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
             return Result.error(MessageConstant.USER_NOT_FOUND);
         }
         // 查询是否点过赞
-        Long userId = userIdUtil.getUserId();
         PostDetailVO postDetailVO = BeanUtil.copyProperties(post, PostDetailVO.class);
         postDetailVO.setCategory(categoryMapper.selectById(post.getCategoryId()).getName());
         postDetailVO.setLiked(
-                userId != null && Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
+                Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + id, userId)));
         Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + id);
         postDetailVO.setCount(count == null ? 0 : count);
         postDetailVO.setAvatar(user.getAvatar());
         postDetailVO.setNickname(user.getNickname());
         postDetailVO.setCover(post.getCover());
-        if (userId == null) {
-            postDetailVO.setFollowed(false);
-        } else {
-            Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
-            postDetailVO.setFollowed(score != null);
-        }
+        Double score = redisTemplate.opsForZSet().score(KeyConstant.Follow_LIST_KEY + userId, user.getId());
+        postDetailVO.setFollowed(score != null);
         return Result.ok(postDetailVO);
     }
 
     @Override
     public Result listPosts(Long lastId, Integer offset) {
-        Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
-                .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
-                        0, lastId, offset, Long.parseLong(systemConstants.defaultPageSize));
-        // 获取当前用户
+        int pageSize = Integer.parseInt(systemConstants.defaultPageSize);
         Long userId = userIdUtil.getUserId();
+
+        // 未登录：按时间倒序从 Redis ZSet 获取
         if (userId == null) {
+            Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
+                    .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
+                            0, lastId, offset, pageSize);
             return Result.ok(getScrollResult(typedTuples, null));
         }
-        return Result.ok(getScrollResult(typedTuples, userId));
+
+        // 获取用户兴趣评分
+        Map<Integer, Integer> interestScores = getUserIntersetScore(userId);
+        boolean hasInterest = interestScores.values().stream().anyMatch(s -> s > 0);
+
+        if (!hasInterest) {
+            // 无兴趣数据：按时间倒序
+            Set<ZSetOperations.TypedTuple<Object>> typedTuples = redisTemplate.opsForZSet()
+                    .reverseRangeByScoreWithScores(KeyConstant.POST_LIST_KEY,
+                            0, lastId, offset, pageSize);
+            return Result.ok(getScrollResult(typedTuples, userId));
+        }
+
+        // 个性化推荐：使用 ES 按兴趣分类加权查询
+        return getPersonalizedPosts(userId, interestScores, offset, pageSize);
+    }
+
+    private Result getPersonalizedPosts(Long userId, Map<Integer, Integer> interestScores, int offset, int pageSize) {
+        int maxScore = interestScores.values().stream().mapToInt(Integer::intValue).max().orElse(1);
+
+        NativeQuery nativeQuery = NativeQuery.builder()
+                .withQuery(Query.of(q -> q.bool(b -> {
+                    b.must(m -> m.term(t -> t.field("enabled").value(true)));
+                    for (Map.Entry<Integer, Integer> entry : interestScores.entrySet()) {
+                        if (entry.getValue() > 0) {
+                            float boost = (float) entry.getValue() / maxScore;
+                            b.should(s -> s.term(t -> t.field("categoryId").value(entry.getKey()).boost(boost)));
+                        }
+                    }
+                    b.minimumShouldMatch("0");
+                    return b;
+                })))
+                .withPageable(PageRequest.of(offset / pageSize, pageSize))
+                .build();
+
+        SearchHits<Post> searchHits = elasticsearchTemplate.search(nativeQuery, Post.class);
+
+        List<PostVO> postVOS = new ArrayList<>();
+        long minTime = 0L;
+        for (SearchHit<Post> hit : searchHits) {
+            Post post = hit.getContent();
+            PostVO postVO = BeanUtil.copyProperties(post, PostVO.class);
+            Integer count = (Integer) redisTemplate.opsForValue().get(KeyConstant.LIKE_COUNT + post.getId());
+            postVO.setCount(count == null ? 0 : count);
+            postVO.setLiked(Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(KeyConstant.LIKE_KEY + post.getId(), userId)));
+            postVOS.add(postVO);
+            if (post.getCreateTime() != null) {
+                minTime = post.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            }
+        }
+
+        ScrollResult<PostVO> result = new ScrollResult<>();
+        result.setList(postVOS);
+        result.setMinTime(minTime);
+        result.setOffset(offset + postVOS.size());
+        return Result.ok(result);
+    }
+
+    // 获取用户兴趣评分
+    private Map<Integer, Integer> getUserIntersetScore(Long userId) {
+        Map<Integer, Integer> score = new HashMap<>();
+        List<Category> categories = categoryMapper.selectList(null);
+        for (Category category : categories) {
+            Object o = redisTemplate.opsForHash()
+                    .get(KeyConstant.USER_INTEREST_SCORE_KEY + userId, String.valueOf(category.getId()));
+            score.put(category.getId(), o == null ? 0 : (Integer) o);
+        }
+        return score;
     }
 
     @Override
@@ -229,10 +300,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements IP
         List<File> files = fileMapper.selectList(new LambdaQueryWrapper<File>().eq(File::getPostId, id));
         fileMapper.delete(new LambdaQueryWrapper<File>().eq(File::getPostId, id));
         for (File file : files) {
-            deleteFileUtils.deleteFile(file.getUrl());
+            deleteFileUtil.deleteFile(file.getUrl());
         }
         // 删除封面图片
-        deleteFileUtils.deleteFile(post.getCover().substring(systemConstants.baseUrl.length()));
+        deleteFileUtil.deleteFile(post.getCover().substring(systemConstants.baseUrl.length()));
         // 删除帖子点赞数据
         likeMapper.delete(new LambdaQueryWrapper<LikeRecord>().eq(LikeRecord::getPostId, id));
         // 删除帖子redis的点赞数据

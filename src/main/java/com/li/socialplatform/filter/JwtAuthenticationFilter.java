@@ -1,6 +1,7 @@
 package com.li.socialplatform.filter;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.utils.JwtUtils;
 import com.li.socialplatform.pojo.entity.User;
 import com.li.socialplatform.server.mapper.AuthorityMapper;
@@ -14,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -38,6 +40,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
     private final UserMapper userMapper;
     private final AuthorityMapper authorityMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
     // ... existing code ...
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -50,6 +53,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtUtils.parseToken(token);
                 String username = claims.getSubject();
                 log.debug("Token 解析成功, 用户名: {}", username);
+
+                // 检查 token 是否在黑名单中（已注销）
+                String jti = claims.getId();
+                if (jti != null && redisTemplate.hasKey(KeyConstant.TOKEN_BLACKLIST_KEY + jti)) {
+                    log.debug("Token 已被注销, 用户名: {}", username);
+                    chain.doFilter(request, response);
+                    return;
+                }
+
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
                     if (user != null) {

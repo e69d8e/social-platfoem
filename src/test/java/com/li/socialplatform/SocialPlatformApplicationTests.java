@@ -16,7 +16,7 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 
 import java.util.Date;
 import java.util.List;
@@ -37,8 +37,7 @@ class SocialPlatformApplicationTests {
     private UserMapper userMapper;
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
-    @Autowired
-    private SimpMessagingTemplate simpMessagingTemplate;
+
     @Test
     void testAddPostElasticSearch() {
         try {
@@ -83,10 +82,6 @@ class SocialPlatformApplicationTests {
 //        });
     }
 
-    @Test
-    void notifyMessage () {
-        simpMessagingTemplate.convertAndSendToUser("li", "/queue/msg", "点赞了你的帖子");
-    }
 
     // 清空Elasticsearch中的数据
     @Test
@@ -98,5 +93,11 @@ class SocialPlatformApplicationTests {
         elasticsearchOperations.indexOps(User.class).delete();
         elasticsearchOperations.indexOps(User.class).create();
         elasticsearchOperations.indexOps(User.class).putMapping();
+    }
+
+    @Test
+    void testRedis() {
+        Object o = redisTemplate.opsForHash().get(KeyConstant.USER_INTEREST_SCORE_KEY + 1, String.valueOf(1));
+        System.out.println(o);
     }
 }

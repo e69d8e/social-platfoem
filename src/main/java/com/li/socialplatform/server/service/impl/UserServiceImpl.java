@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
-import com.li.socialplatform.common.utils.DeleteFileUtils;
+import com.li.socialplatform.common.utils.DeleteFileUtil;
 import com.li.socialplatform.common.utils.JwtUtils;
 import com.li.socialplatform.common.utils.UserIdUtil;
 import com.li.socialplatform.pojo.dto.LoginDTO;
@@ -54,6 +54,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static com.li.socialplatform.common.constant.KeyConstant.TOKEN_BLACKLIST_KEY;
+
 /**
  * @author e69d8e
  * @since 2025/12/8 15:45
@@ -71,7 +73,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private final PostElasticsearchRepository postElasticsearchRepository;
     private final JwtUtils jwtUtils;
     private final AuthenticationManager authenticationManager;
-    private final DeleteFileUtils deleteFileUtils;
+    private final DeleteFileUtil deleteFileUtil;
     private final FileMapper fileMapper;
 
     @Value("${jwt.access-expire}")
@@ -117,7 +119,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Result refresh(RefreshDTO refreshDTO) {
+    public Result refresh(RefreshDTO refreshDTO, HttpServletRequest request) {
         String refreshToken = refreshDTO.getRefreshToken();
         if (StringUtils.isEmpty(refreshToken)) {
             throw new RuntimeException("refresh token is empty");
@@ -137,19 +139,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (!refreshToken.equals(storedRefreshToken)) {
             throw new RuntimeException("refresh token 不匹配");
         }
-        // 3. 生成新的 accessToken（也可同时刷新 refreshToken，可选）
+        // 3. 将旧 access token 加入黑名单
+        blacklistAccessToken(request);
+        // 4. 生成新的 token
         String newAccessToken = jwtUtils.generateToken(username, accessExpire);
-        // 可选：如果希望 refreshToken 也续期，可以重新生成并更新 Redis
-         String newRefreshToken = jwtUtils.generateToken(username, refreshExpire);
-         redisTemplate.opsForValue().set(KeyConstant.REFRESH_KEY + username, newRefreshToken, refreshExpire, TimeUnit.MILLISECONDS);
-        return Result.ok(new TokenVO(newAccessToken, newRefreshToken)); // refreshToken 可不变或返回新值
+        String newRefreshToken = jwtUtils.generateToken(username, refreshExpire);
+        redisTemplate.opsForValue().set(KeyConstant.REFRESH_KEY + username, newRefreshToken, refreshExpire, TimeUnit.MILLISECONDS);
+        return Result.ok(new TokenVO(newAccessToken, newRefreshToken));
+    }
+
+    private void blacklistAccessToken(HttpServletRequest request) {
+        String token = request.getHeader("Authorization");
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+            try {
+                String jti = jwtUtils.getTokenId(token);
+                long remaining = jwtUtils.getRemainingExpiration(token);
+                if (remaining > 0) {
+                    redisTemplate.opsForValue().set(TOKEN_BLACKLIST_KEY + jti, "", remaining, TimeUnit.MILLISECONDS);
+                }
+            } catch (Exception e) {
+                log.warn("将 token 加入黑名单失败: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
     public Result logout(HttpServletRequest request) {
         String username = getCurrentUsername();
         redisTemplate.delete(KeyConstant.REFRESH_KEY + username);
-        return Result.ok();
+        blacklistAccessToken(request);
+        return Result.ok(MessageConstant.USER_LOGOUT_SUCCESS, "");
     }
 
     @Override
@@ -254,7 +274,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             String url = userDTO.getOldAvatar().substring(systemConstants.baseUrl.length());
             int delete = fileMapper.delete(new LambdaQueryWrapper<File>().eq(File::getUrl, url).eq(File::getUserId, user.getId()));
             if (delete >0) {
-                deleteFileUtils.deleteFile(url);
+                deleteFileUtil.deleteFile(url);
             }
         }
         return Result.ok(MessageConstant.UPDATE_SUCCESS, "");

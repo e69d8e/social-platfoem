@@ -20,4 +20,6 @@ public class KeyConstant {
     public static final String FRIEND_LIST_KEY = "friend-list:";
     public static final String REFRESH_KEY = "refresh:";
     public static final String POST_ID_KEY = "post:";
+    public static final String USER_INTEREST_SCORE_KEY = "user-interests:";
+    public static final String TOKEN_BLACKLIST_KEY = "token-blacklist:";
 }

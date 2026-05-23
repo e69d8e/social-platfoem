@@ -11,7 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public interface IUserService extends IService<User> {
     Result login(LoginDTO loginDTO);
 
-    Result refresh(RefreshDTO refreshDTO);
+    Result refresh(RefreshDTO refreshDTO, HttpServletRequest request);
 
     Result register(UserDTO userDTO);
 

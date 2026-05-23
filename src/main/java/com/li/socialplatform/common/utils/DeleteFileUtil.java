@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DeleteFileUtils {
+public class DeleteFileUtil {
 
     private final SystemConstants systemConstants;
 

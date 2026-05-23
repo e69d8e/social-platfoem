@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtUtils {
@@ -16,6 +17,7 @@ public class JwtUtils {
     public String generateToken(String username, Long expireTime) {
         return Jwts.builder()
             .setSubject(username)
+            .setId(UUID.randomUUID().toString())
             .setIssuedAt(new Date())
             .setExpiration(new Date(System.currentTimeMillis() + expireTime))
             .signWith(SignatureAlgorithm.HS512, secret)
@@ -28,5 +30,14 @@ public class JwtUtils {
 
     public boolean isTokenExpired(String token) {
         return parseToken(token).getExpiration().before(new Date());
+    }
+
+    public String getTokenId(String token) {
+        return parseToken(token).getId();
+    }
+
+    public long getRemainingExpiration(String token) {
+        Claims claims = parseToken(token);
+        return claims.getExpiration().getTime() - System.currentTimeMillis();
     }
 }

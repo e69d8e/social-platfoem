@@ -26,8 +26,8 @@ public class UserController {
     }
 
     @PostMapping("/refresh")
-    public Result refresh(@RequestBody RefreshDTO refreshDTO) {
-        return userService.refresh(refreshDTO);
+    public Result refresh(@RequestBody RefreshDTO refreshDTO, HttpServletRequest request) {
+        return userService.refresh(refreshDTO, request);
     }
 
     @PostMapping("/logout")

@@ -7,7 +7,9 @@ import com.li.socialplatform.common.constant.KeyConstant;
 import com.li.socialplatform.common.constant.MessageConstant;
 import com.li.socialplatform.common.properties.SystemConstants;
 import com.li.socialplatform.common.utils.UserIdUtil;
+import com.li.socialplatform.common.utils.UserIntersetScoreUtil;
 import com.li.socialplatform.server.mapper.CommentMapper;
+import com.li.socialplatform.server.mapper.PostMapper;
 import com.li.socialplatform.server.mapper.UserMapper;
 import com.li.socialplatform.pojo.dto.CommentDTO;
 import com.li.socialplatform.pojo.entity.*;
@@ -39,6 +41,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     private final CommentMapper commentMapper;
     private final UserMapper userMapper;
     private final UserIdUtil userIdUtil;
+    private final UserIntersetScoreUtil userIntersetScoreUtil;
+    private final PostMapper postMapper;
 
     @Override
     public Result addComment(CommentDTO commentDTO) {
@@ -63,6 +67,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                     .add(KeyConstant.COMMENT_KEY + commentDTO.getPostId(),
                             comment.getId(), timeMillis);
         }
+        // 用户兴趣+1
+        Post post = postMapper.selectById(comment.getPostId());
+        userIntersetScoreUtil.changeScore(userId, post.getCategoryId(), 2);
         return Result.ok(MessageConstant.ADD_COMMENT_SUCCESS, "");
     }
 
